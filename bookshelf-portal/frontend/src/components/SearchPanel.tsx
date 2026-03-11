@@ -23,7 +23,7 @@ export default function SearchPanel({ onSearch, loading }: Props) {
   return (
     <div>
       <p className="text-muted mb-3" style={{ fontSize: '14px' }}>
-        Search for a book below to be added to Calibre. For best results, please provide the full title and author name.
+        Search for a book below to be added to Calibre. For best results, please provide the full title and author name separated by a comma.
       </p>
       <div className="d-flex gap-2">
         <div className="flex-grow-1">
