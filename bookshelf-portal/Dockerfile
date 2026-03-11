@@ -18,7 +18,6 @@ COPY backend/ ./
 # Copy built frontend into static dir
 COPY --from=frontend-build /app/frontend/dist ./static
 
-ENV PORT=8788
 EXPOSE 8788
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8788"]
