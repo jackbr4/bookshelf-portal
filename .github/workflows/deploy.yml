@@ -25,8 +25,7 @@ jobs:
             podman build -t bookshelf-request-portal ./bookshelf-portal
 
             echo "Restarting container..."
-            podman stop bookshelf-request-portal || true
-            podman rm bookshelf-request-portal || true
+            podman rm -f bookshelf-request-portal || true
             podman run -d --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
 
             echo "Verifying..."
