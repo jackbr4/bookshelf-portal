@@ -68,12 +68,16 @@ export default function RequestRoute() {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === 'SESSION_EXPIRED') { handleSessionExpired(); return }
       if (msg === 'DUPLICATE') {
-        showToast({ kind: 'info', message: 'This book is already in the library or being monitored.' })
+        showToast({
+          kind: 'info',
+          message: 'This book is already in the library or being monitored.',
+          subMessage: 'TODO: duplicate book sub-message',
+        })
       } else if (msg === 'AUTHOR_NOT_FOUND') {
         showToast({
           kind: 'error',
           message: 'Could not look up this book.',
-          subMessage: 'Try searching with the full title and author name.',
+          subMessage: 'TODO: author not found sub-message',
           actionLabel: 'Retry',
           onAction: () => handleAddBook(item),
         })
@@ -81,6 +85,7 @@ export default function RequestRoute() {
         showToast({
           kind: 'error',
           message: 'This book could not be added. Please try again in a few minutes.',
+          subMessage: 'TODO: bookshelf error sub-message',
           actionLabel: 'Retry',
           onAction: () => handleAddBook(item),
         })
@@ -88,7 +93,7 @@ export default function RequestRoute() {
         showToast({
           kind: 'error',
           message: 'Cannot reach Bookshelf.',
-          subMessage: 'The library server is not responding. Please wait a moment and try again.',
+          subMessage: 'TODO: connection error sub-message',
           actionLabel: 'Retry',
           onAction: () => handleAddBook(item),
         })
@@ -96,7 +101,7 @@ export default function RequestRoute() {
         showToast({
           kind: 'error',
           message: 'Something went wrong while adding this book.',
-          subMessage: 'Please try again. If the problem persists, try searching with the full title and author name.',
+          subMessage: 'TODO: generic error sub-message',
           actionLabel: 'Retry',
           onAction: () => handleAddBook(item),
         })

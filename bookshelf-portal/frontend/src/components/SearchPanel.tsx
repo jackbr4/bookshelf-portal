@@ -23,13 +23,13 @@ export default function SearchPanel({ onSearch, loading }: Props) {
   return (
     <div>
       <p className="text-muted mb-3" style={{ fontSize: '14px' }}>
-        Search for a book or series to request it for download.
+        Search for a book below to be added to Calibre. For best results, please provide the full title and author name.
       </p>
       <div className="d-flex gap-2">
         <div className="flex-grow-1">
           <PortalInput
             id="search-query"
-            placeholder="Search for a book or series"
+            placeholder="Search for a book"
             value={query}
             onChange={(v) => { setQuery(v); if (validationError) setValidationError('') }}
             onEnter={handleSearch}
