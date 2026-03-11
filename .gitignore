@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# Environment files (contain secrets)
+backend/.env
+.env
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Misc
+*.zip
+cursor-bookshelf-bootstrap-handoff/
+bookshelf_request_portal_technical_spec.md

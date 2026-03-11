@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  bookshelf-portal:
+    build: .
+    ports:
+      - "${PORT:-8788}:8788"
+    env_file:
+      - .env
+    restart: unless-stopped
