@@ -28,5 +28,5 @@ jobs:
             podman run -d --replace --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
 
             echo "Verifying..."
-            sleep 3
+            sleep 10
             curl -sf http://127.0.0.1:8788/health && echo "Health check passed"
