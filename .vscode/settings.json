@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/bookshelf-portal/backend/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/bookshelf-portal/backend"
+  ],
+  "python.analysis.typeCheckingMode": "basic"
+}

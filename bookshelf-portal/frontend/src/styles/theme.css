@@ -1,0 +1,112 @@
+:root {
+  --font-base: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --color-page-bg: #F8F9FA;
+  --color-surface: #FFFFFF;
+  --color-border: #DEE2E6;
+  --color-text-primary: #212529;
+  --color-text-muted: #6C757D;
+  --color-primary: #0D6EFD;
+  --color-success: #198754;
+  --color-danger: #DC3545;
+  --color-available-bg: #D1E7DD;
+  --color-available-text: #0F5132;
+  --color-warning-bg: #FFF3CD;
+  --color-warning-text: #664D03;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+}
+
+body {
+  font-family: var(--font-base);
+  background-color: var(--color-page-bg);
+  color: var(--color-text-primary);
+}
+
+/* Password gate */
+.portal-gate-card {
+  max-width: 400px;
+  width: 100%;
+}
+
+/* Result card */
+.result-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: box-shadow 0.15s ease;
+}
+
+.result-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.result-card .cover-placeholder {
+  width: 56px;
+  height: 72px;
+  background: #E9ECEF;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 24px;
+}
+
+.result-card .cover-img {
+  width: 56px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+/* Badges */
+.badge-available {
+  background-color: var(--color-available-bg);
+  color: var(--color-available-text);
+}
+
+.badge-library {
+  background-color: #CFE2FF;
+  color: #084298;
+}
+
+.badge-monitored {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+/* Toast */
+.portal-toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 360px;
+}
+
+/* Search section */
+.search-panel {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Spinner */
+.btn-loading .spinner-border {
+  width: 1rem;
+  height: 1rem;
+  border-width: 0.15em;
+}
+
+@media (max-width: 576px) {
+  .portal-toast-container {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+  }
+}
