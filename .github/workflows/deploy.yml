@@ -27,13 +27,8 @@ jobs:
             echo "Restarting container..."
             podman stop bookshelf-request-portal || true
             podman rm bookshelf-request-portal || true
-            podman run -d \
-              --name bookshelf-request-portal \
-              --restart=always \
-              -p 8789:8788 \
-              --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env \
-              bookshelf-request-portal
+            podman run -d --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
 
             echo "Verifying..."
             sleep 3
-            curl -sf http://localhost:8789/health && echo "Health check passed"
+            curl -sf http://127.0.0.1:8788/health && echo "Health check passed"
