@@ -116,8 +116,6 @@ class BookshelfClient:
                 self._get_library_books(),
             )
 
-            # If Bookshelf returned nothing (crashed or empty), fall back to
-            # Open Library which has better coverage of classic/literary titles.
             if not raw_books:
                 logger.info("[search] Bookshelf returned no results — trying Open Library fallback")
                 raw_books = await self._search_open_library(query)

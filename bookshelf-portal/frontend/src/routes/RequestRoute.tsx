@@ -199,7 +199,25 @@ export default function RequestRoute() {
               />
             )}
 
-            {(results.filteredBooks?.length ?? 0) > 0 && (
+            {!hasBooks && hasFiltered && !searching && (
+              <>
+                <p className="text-muted mb-3" style={{ fontSize: '14px' }}>
+                  I couldn't find an exact match, but here are some other results that may have what you're looking for:
+                </p>
+                <div className="border rounded" style={{ overflow: 'hidden' }}>
+                  {results.filteredBooks!.map((book, i) => (
+                    <FilteredRow
+                      key={book.id}
+                      book={book}
+                      onAdd={handleAddBook}
+                      last={i === results.filteredBooks!.length - 1}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {hasBooks && hasFiltered && (
               <div className="mt-3">
                 <button
                   className="btn btn-link btn-sm p-0 text-decoration-none"
