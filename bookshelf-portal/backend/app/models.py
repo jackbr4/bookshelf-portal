@@ -33,6 +33,7 @@ class SeriesResult(BaseModel):
 class SearchResponse(BaseModel):
     books: List[BookResult]
     series: List[SeriesResult]
+    filtered_books: List[BookResult] = []
 
 
 class AuthRequest(BaseModel):
