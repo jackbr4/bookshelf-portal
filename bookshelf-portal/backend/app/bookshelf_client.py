@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import re
+import time
 from datetime import datetime, timezone
 from typing import Optional
 import httpx
@@ -7,6 +9,11 @@ from fastapi import HTTPException
 
 from .models import SearchResponse, BookResult, SeriesResult, ItemStatus, AddResponse
 from .search_adapter import search_books, SearchBookResult
+
+# ---------------------------------------------------------------------------
+# Library cache — avoids re-fetching all books on every search
+# ---------------------------------------------------------------------------
+_LIBRARY_CACHE_TTL = 300  # seconds (5 minutes)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +31,34 @@ MOCK_BOOKS = [
 
 # Series mock kept for future use when series search is redesigned.
 MOCK_SERIES: list[SeriesResult] = []
+
+
+_LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+
+
+def _build_query_fallbacks(query: str) -> list[str]:
+    """
+    Return a list of query strings to try in order when Bookshelf returns 5xx.
+
+    Bookshelf's lookup endpoint fails on certain phrasings. Common fixes:
+    - Strip a leading article ("The Hobbit" → "Hobbit")
+    - Use only the first two words for long queries
+    """
+    queries = [query]
+
+    # Fallback 1: strip leading "The" / "A" / "An"
+    stripped = _LEADING_ARTICLE.sub("", query).strip()
+    if stripped and stripped.lower() != query.lower():
+        queries.append(stripped)
+
+    # Fallback 2: first two words (helps with very long titles)
+    words = query.split()
+    if len(words) > 3:
+        short = " ".join(words[:2])
+        if short not in queries:
+            queries.append(short)
+
+    return queries
 
 
 def _parse_author_name(author_title: str) -> str:
@@ -49,7 +84,14 @@ class BookshelfClient:
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={"X-Api-Key": self.api_key},
-            timeout=25.0,  # Increased from 15s — Bookshelf lookup can be slow
+            timeout=30.0,
+        )
+        # In-memory library cache: (books_list, fetched_at_monotonic)
+        self._library_cache: tuple[list[dict], float] | None = None
+        # Separate client for Open Library (no auth, different base URL)
+        self._ol_client = httpx.AsyncClient(
+            base_url="https://openlibrary.org",
+            timeout=10.0,
         )
 
     # -----------------------------------------------------------------------
@@ -61,14 +103,17 @@ class BookshelfClient:
             return self._mock_search(query)
 
         try:
-            # Fetch book lookup results and library books concurrently.
-            # Series lookup is intentionally omitted — the Bookshelf series
-            # endpoint is unreliable. Series search may be reintroduced later
-            # using a different metadata strategy.
+            # Run Bookshelf lookup and library fetch concurrently.
             raw_books, library_books = await asyncio.gather(
                 self._lookup_books(query),
                 self._get_library_books(),
             )
+
+            # If Bookshelf returned nothing (crashed or empty), fall back to
+            # Open Library which has better coverage of classic/literary titles.
+            if not raw_books:
+                logger.info("[search] Bookshelf returned no results — trying Open Library fallback")
+                raw_books = await self._search_open_library(query)
 
             results = search_books(query, raw_books, library_books)
             books = [self._adapter_result_to_book_result(r) for r in results]
@@ -185,53 +230,133 @@ class BookshelfClient:
 
     async def _lookup_books(self, query: str) -> list[dict]:
         """
-        Call /api/v1/book/lookup with one retry on timeout.
-        Returns raw list of book dicts (may be empty on failure).
+        Call /api/v1/book/lookup, with two fallback strategies when Bookshelf
+        returns 5xx or times out:
+
+        Attempt 1 — original query
+        Attempt 2 — strip leading article ("The Hobbit" → "Hobbit")
+        Attempt 3 — first two words only (for long queries that confuse Bookshelf)
+
+        Returns raw list of book dicts, or raises HTTPException on total failure.
         """
-        for attempt in range(2):
+        queries_to_try = _build_query_fallbacks(query)
+
+        last_error: Exception | None = None
+        for attempt, term in enumerate(queries_to_try):
             try:
-                resp = await self._client.get("/api/v1/book/lookup", params={"term": query})
+                logger.info("[lookup] attempt %d query=%r", attempt + 1, term)
+                resp = await self._client.get("/api/v1/book/lookup", params={"term": term}, timeout=10.0)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return data if isinstance(data, list) else []
+                    results = data if isinstance(data, list) else []
+                    logger.info("[lookup] attempt %d returned %d results", attempt + 1, len(results))
+                    return results
                 if resp.status_code >= 500:
-                    logger.warning("Book lookup returned %s for %r", resp.status_code, query)
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            "Search failed for this title. "
-                            "Try including the author's name (e.g. \"Walden Thoreau\")."
-                        ),
-                    )
-                logger.warning("Book lookup returned %s for %r", resp.status_code, query)
+                    logger.warning("[lookup] attempt %d got %s for %r — trying fallback",
+                                   attempt + 1, resp.status_code, term)
+                    last_error = Exception(f"Bookshelf returned {resp.status_code}")
+                    continue  # try next fallback query
+                logger.warning("[lookup] attempt %d got %s for %r", attempt + 1, resp.status_code, term)
                 return []
-            except HTTPException:
-                raise
             except httpx.TimeoutException as e:
-                if attempt == 0:
-                    logger.warning("Book lookup timed out for %r, retrying…", query)
-                    continue
-                logger.error("Book lookup timed out twice for %r: %s", query, e)
-                raise HTTPException(status_code=504, detail="Search timed out. Please try again.")
+                logger.warning("[lookup] attempt %d timed out for %r", attempt + 1, term)
+                last_error = e
+                continue  # retry with next fallback
             except Exception as e:
-                logger.warning("Book lookup failed for %r: %s", query, e)
+                logger.warning("[lookup] attempt %d failed for %r: %s", attempt + 1, term, e)
                 return []
+
+        # All Bookshelf attempts exhausted — return empty so caller can try fallback.
+        # Only propagate timeout as an error; 5xx failures are handled by OL fallback.
+        if isinstance(last_error, httpx.TimeoutException):
+            logger.warning("[lookup] all attempts timed out for %r", query)
+        else:
+            logger.warning("[lookup] all attempts failed for %r — will try Open Library", query)
         return []
 
     async def _get_library_books(self) -> list[dict]:
         """
         Fetch all books currently in the Bookshelf library.
-        Returns full book dicts so the search adapter can match on both
-        foreignBookId and normalised (title, author) pairs.
+
+        Results are cached in memory for _LIBRARY_CACHE_TTL seconds (5 min) so
+        that consecutive searches don't each pay the full round-trip cost.
+        If the fresh fetch times out or fails, the stale cache is returned so
+        search results are still annotated with library status.
         """
+        now = time.monotonic()
+
+        # Return cached data if still fresh
+        if self._library_cache and (now - self._library_cache[1]) < _LIBRARY_CACHE_TTL:
+            logger.debug("[library] using cached data (%d books)", len(self._library_cache[0]))
+            return self._library_cache[0]
+
         try:
-            resp = await self._client.get("/api/v1/book")
+            resp = await self._client.get("/api/v1/book", timeout=12.0)
             resp.raise_for_status()
             data = resp.json()
-            return data if isinstance(data, list) else []
+            books = data if isinstance(data, list) else []
+            self._library_cache = (books, now)
+            logger.info("[library] fetched %d books (cache refreshed)", len(books))
+            return books
+        except asyncio.TimeoutError:
+            logger.warning("[library] fetch timed out — using stale cache or empty")
         except Exception as e:
-            logger.warning("Could not fetch library books (status checks disabled): %s", e)
+            logger.warning("[library] fetch failed — using stale cache or empty: %s", e)
+
+        # Return stale cache if available, otherwise empty (search still works,
+        # just without library status annotations)
+        return self._library_cache[0] if self._library_cache else []
+
+    async def _search_open_library(self, query: str) -> list[dict]:
+        """
+        Search Open Library as a fallback when Bookshelf cannot handle the query.
+
+        Results are mapped to the same raw-dict shape that normalize_raw_book_result
+        expects, with foreignBookId prefixed "ol:" so the add flow knows to re-lookup
+        in Bookshelf by title rather than by ID.
+        """
+        try:
+            resp = await self._ol_client.get("/search.json", params={
+                "q": query,
+                "fields": "key,title,author_name,first_publish_year,cover_i,language",
+                "limit": 20,
+            })
+            if resp.status_code != 200:
+                logger.warning("[ol] search returned %s for %r", resp.status_code, query)
+                return []
+            docs = resp.json().get("docs", [])
+            logger.info("[ol] returned %d docs for %r", len(docs), query)
+            return [self._open_library_to_raw_dict(d) for d in docs if d.get("title")]
+        except Exception as e:
+            logger.warning("[ol] search failed for %r: %s", query, e)
             return []
+
+    @staticmethod
+    def _open_library_to_raw_dict(doc: dict) -> dict:
+        """Map an Open Library search doc to the internal raw-book dict shape."""
+        authors = doc.get("author_name") or []
+        author_name = authors[0] if authors else ""
+
+        cover_i = doc.get("cover_i")
+        cover_url = f"https://covers.openlibrary.org/b/id/{cover_i}-M.jpg" if cover_i else None
+
+        # Use the first language tag if available; default to "en" (OL is primarily English)
+        languages = doc.get("language") or []
+        language = languages[0] if languages else "en"
+
+        year = doc.get("first_publish_year")
+        release_date = f"{year}-01-01" if year else None
+
+        return {
+            "foreignBookId": f"ol:{doc.get('key', '')}",
+            "title": doc.get("title", ""),
+            "authorName": author_name,
+            "releaseDate": release_date,
+            "remoteCover": cover_url,
+            "language": language,
+            "foreignEditionId": None,
+            "seriesTitle": None,
+        }
 
     async def _lookup_foreign_author_id(self, author_name: str) -> Optional[str]:
         try:
@@ -250,21 +375,39 @@ class BookshelfClient:
         title: Optional[str],
         author: Optional[str] = None,
     ) -> Optional[dict]:
-        """Get the full book lookup result needed to build an add payload."""
+        """
+        Get the full Bookshelf lookup result needed to build an add payload.
+
+        For native Bookshelf IDs: match by foreignBookId.
+        For Open Library IDs (prefixed "ol:"): return the first Bookshelf result
+        for the title+author query — Bookshelf orders by relevance so first is best.
+        """
+        is_ol_id = foreign_book_id.startswith("ol:")
+
         search_terms = []
         if title:
-            search_terms.append(title)
             if author:
                 search_terms.append(f"{title} {author}")
+            search_terms.append(title)
+
         for term in search_terms:
             try:
                 resp = await self._client.get("/api/v1/book/lookup", params={"term": term})
                 if resp.status_code == 200:
                     data = resp.json()
-                    books = data if isinstance(data, list) else [data]
-                    for book in books:
-                        if isinstance(book, dict) and str(book.get("foreignBookId", "")) == str(foreign_book_id):
-                            return book
+                    books = [b for b in (data if isinstance(data, list) else [data]) if isinstance(b, dict)]
+
+                    if is_ol_id:
+                        # For OL results take the first (most relevant) Bookshelf match
+                        if books:
+                            logger.info("OL add: using first Bookshelf result for %r (id=%s)",
+                                        term, books[0].get("foreignBookId"))
+                            return books[0]
+                    else:
+                        for book in books:
+                            if str(book.get("foreignBookId", "")) == str(foreign_book_id):
+                                return book
+
                     logger.warning("Book %s not found in lookup for %r", foreign_book_id, term)
                 else:
                     logger.warning("Lookup returned %s for %r", resp.status_code, term)
