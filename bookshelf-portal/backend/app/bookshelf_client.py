@@ -34,6 +34,7 @@ MOCK_SERIES: list[SeriesResult] = []
 
 
 _LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+_APOSTROPHES = re.compile(r"[''`\u2018\u2019\u02bc]")
 
 
 def _build_query_fallbacks(query: str) -> list[str]:
@@ -41,17 +42,23 @@ def _build_query_fallbacks(query: str) -> list[str]:
     Return a list of query strings to try in order when Bookshelf returns 5xx.
 
     Bookshelf's lookup endpoint fails on certain phrasings. Common fixes:
+    - Strip apostrophes ("Philosopher's Stone" → "Philosophers Stone")
     - Strip a leading article ("The Hobbit" → "Hobbit")
     - Use only the first two words for long queries
     """
     queries = [query]
 
-    # Fallback 1: strip leading "The" / "A" / "An"
+    # Fallback 1: remove apostrophes — Bookshelf/Readarr sometimes 5xx on them
+    sanitized = _APOSTROPHES.sub("", query).strip()
+    if sanitized and sanitized.lower() != query.lower():
+        queries.append(sanitized)
+
+    # Fallback 2: strip leading "The" / "A" / "An"
     stripped = _LEADING_ARTICLE.sub("", query).strip()
-    if stripped and stripped.lower() != query.lower():
+    if stripped and stripped.lower() != query.lower() and stripped not in queries:
         queries.append(stripped)
 
-    # Fallback 2: first two words (helps with very long titles)
+    # Fallback 3: first two words (helps with very long titles)
     words = query.split()
     if len(words) > 3:
         short = " ".join(words[:2])
@@ -115,10 +122,11 @@ class BookshelfClient:
                 logger.info("[search] Bookshelf returned no results — trying Open Library fallback")
                 raw_books = await self._search_open_library(query)
 
-            results = search_books(query, raw_books, library_books)
+            results, filtered_out = search_books(query, raw_books, library_books)
             books = [self._adapter_result_to_book_result(r) for r in results]
+            filtered_books = [self._adapter_result_to_book_result(r) for r in filtered_out]
 
-            return SearchResponse(books=books, series=[])
+            return SearchResponse(books=books, series=[], filtered_books=filtered_books)
 
         except HTTPException:
             raise

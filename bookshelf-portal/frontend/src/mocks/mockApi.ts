@@ -43,7 +43,7 @@ export async function mockSearch(query: string): Promise<SearchResults> {
   const series = MOCK_SERIES.filter(s =>
     s.title.toLowerCase().includes(q) || s.author.toLowerCase().includes(q)
   );
-  return { books, series };
+  return { books, series, filteredBooks: [] };
 }
 
 export async function mockAddBook(_bookId: string): Promise<AddResponse> {

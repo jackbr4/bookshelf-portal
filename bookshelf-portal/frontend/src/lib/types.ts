@@ -24,6 +24,7 @@ export interface SeriesResult {
 export interface SearchResults {
   books: BookResult[];
   series: SeriesResult[];
+  filteredBooks: BookResult[];
 }
 
 export interface ToastState {

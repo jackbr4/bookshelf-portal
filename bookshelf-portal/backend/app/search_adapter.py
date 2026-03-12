@@ -153,9 +153,13 @@ def normalize_text(text: str) -> str:
 
     text = _EDITION_NOISE.sub(" ", text)
 
+    # Normalize & → 'and' so "Harry Potter & the Chamber of Secrets" scores the
+    # same as "Harry Potter and the Chamber of Secrets".
+    text = re.sub(r"\s*&\s*", " and ", text)
+
     # Remove apostrophes/smart-quotes without inserting a space (so "hitchhiker's"
     # → "hitchhikers", not "hitchhiker s").
-    text = re.sub(r"[''`]", "", text)
+    text = re.sub(r"[''`\u2018\u2019\u02bc]", "", text)
 
     # Replace remaining punctuation with space
     text = re.sub(r"[^\w\s]", " ", text)
@@ -357,11 +361,16 @@ def search_books(
     query: str,
     raw_books: list[dict],
     library_books: list[dict],
-) -> list[SearchBookResult]:
+) -> tuple[list[SearchBookResult], list[SearchBookResult]]:
     """
     Full search pipeline:
       raw Bookshelf results → normalise → score → filter → deduplicate
       → rank → annotate library status → return top N
+
+    Returns:
+        (final_results, filtered_out) — filtered_out contains results that
+        scored below MIN_SCORE_THRESHOLD, deduplicated and sorted by score
+        descending, so the UI can show them in a collapsed "other results" list.
 
     Args:
         query:         The user's original search string.
@@ -383,21 +392,26 @@ def search_books(
         result.score = score_result(query, query_tokens, result)
 
     # --- Filter below threshold ---
-    filtered = [r for r in normalised if r.score >= MIN_SCORE_THRESHOLD]
-    logger.info("[search] after_filter=%d  (threshold=%d)", len(filtered), MIN_SCORE_THRESHOLD)
+    kept = [r for r in normalised if r.score >= MIN_SCORE_THRESHOLD]
+    below = [r for r in normalised if r.score < MIN_SCORE_THRESHOLD]
+    logger.info("[search] after_filter=%d  filtered_out=%d  (threshold=%d)",
+                len(kept), len(below), MIN_SCORE_THRESHOLD)
 
     # --- Deduplicate editions ---
-    grouped = group_duplicate_editions(filtered)
-    logger.info("[search] after_dedup=%d", len(grouped))
+    grouped = group_duplicate_editions(kept)
+    filtered_out = group_duplicate_editions(below)
+    logger.info("[search] after_dedup=%d  filtered_out_dedup=%d", len(grouped), len(filtered_out))
 
     # --- Rank ---
     ranked = sorted(grouped, key=lambda r: r.score, reverse=True)
+    filtered_out_ranked = sorted(filtered_out, key=lambda r: r.score, reverse=True)
 
     # --- Annotate library status ---
     annotated = annotate_existing_or_monitored(ranked, library_books)
+    annotated_filtered = annotate_existing_or_monitored(filtered_out_ranked, library_books)
 
     final = annotated[:MAX_RESULTS]
     elapsed = time.monotonic() - t0
     logger.info("[search] final=%d  elapsed=%.2fs", len(final), elapsed)
 
-    return final
+    return final, annotated_filtered
