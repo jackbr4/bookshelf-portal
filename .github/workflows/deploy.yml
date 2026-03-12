@@ -24,8 +24,17 @@ jobs:
             echo "Building container..."
             podman build -t bookshelf-request-portal ./bookshelf-portal
 
-            echo "Restarting container..."
-            podman run -d --replace --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
+            echo "Stopping old container..."
+            podman update --restart=no bookshelf-request-portal || true
+            OLD_PID=$(podman inspect bookshelf-request-portal --format '{{.State.Pid}}' 2>/dev/null || echo "")
+            if [ -n "$OLD_PID" ] && [ "$OLD_PID" != "0" ]; then
+              kill -9 $OLD_PID || true
+              sleep 2
+            fi
+            podman rm -f bookshelf-request-portal || true
+
+            echo "Starting new container..."
+            podman run -d --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
 
             echo "Verifying..."
             sleep 10
