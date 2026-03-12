@@ -8,6 +8,37 @@ import { search, addBook, logout } from '../lib/api'
 import { clearSession } from '../lib/session'
 import type { SearchResults, ToastState, ItemStatus, BookResult, SeriesResult } from '../lib/types'
 
+function FilteredRow({ book, onAdd, last }: { book: BookResult; onAdd: (b: BookResult) => Promise<void>; last: boolean }) {
+  const [adding, setAdding] = useState(false)
+  const subtitle = [book.author, book.year ? String(book.year) : null, book.seriesName].filter(Boolean).join(' · ')
+
+  async function handleAdd() {
+    setAdding(true)
+    try { await onAdd(book) } finally { setAdding(false) }
+  }
+
+  return (
+    <div
+      className={`d-flex align-items-center justify-content-between gap-2 px-3 py-2${last ? '' : ' border-bottom'}`}
+      style={{ background: 'var(--color-card-bg, #fff)', minHeight: '48px' }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <span className="fw-medium" style={{ fontSize: '14px' }}>{book.title}</span>
+        {subtitle && <span className="text-muted ms-2" style={{ fontSize: '12px' }}>{subtitle}</span>}
+      </div>
+      {book.status === 'available' ? (
+        <PortalButton variant="outline-secondary" size="sm" loading={adding} onClick={handleAdd} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          Add
+        </PortalButton>
+      ) : (
+        <span className="text-muted" style={{ fontSize: '12px', flexShrink: 0 }}>
+          {book.status === 'already_monitored' ? 'Monitored' : 'Added'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function RequestRoute() {
   const navigate = useNavigate()
   const [results, setResults] = useState<SearchResults | null>(null)
@@ -15,6 +46,7 @@ export default function RequestRoute() {
   const [searchError, setSearchError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
   const [lastQuery, setLastQuery] = useState('')
+  const [showFiltered, setShowFiltered] = useState(false)
 
   function showToast(t: ToastState) {
     setToast(t)
@@ -31,6 +63,7 @@ export default function RequestRoute() {
     setSearchError(null)
     setResults(null)
     setLastQuery(query)
+    setShowFiltered(false)
     try {
       const data = await search(query)
       setResults(data)
@@ -55,6 +88,9 @@ export default function RequestRoute() {
         return {
           ...prev,
           books: prev.books.map(b =>
+            b.id === item.id ? { ...b, status: 'already_monitored' as ItemStatus } : b
+          ),
+          filteredBooks: prev.filteredBooks.map(b =>
             b.id === item.id ? { ...b, status: 'already_monitored' as ItemStatus } : b
           ),
         }
@@ -116,7 +152,8 @@ export default function RequestRoute() {
   }
 
   const hasBooks = (results?.books.length ?? 0) > 0
-  const noResults = results !== null && !hasBooks
+  const hasFiltered = (results?.filteredBooks?.length ?? 0) > 0
+  const noResults = results !== null && !hasBooks && !hasFiltered
 
   return (
     <div className="min-vh-100" style={{ background: 'var(--color-page-bg)' }}>
@@ -160,6 +197,30 @@ export default function RequestRoute() {
                 items={results.books}
                 onAdd={handleAddBook}
               />
+            )}
+
+            {(results.filteredBooks?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <button
+                  className="btn btn-link btn-sm p-0 text-decoration-none"
+                  style={{ fontSize: '13px', color: 'var(--color-text-muted, #6c757d)' }}
+                  onClick={() => setShowFiltered(v => !v)}
+                >
+                  {showFiltered ? '▾' : '▸'} {showFiltered ? 'Hide' : 'Show'} other results ({results.filteredBooks!.length})
+                </button>
+                {showFiltered && (
+                  <div className="mt-2 border rounded" style={{ overflow: 'hidden' }}>
+                    {results.filteredBooks!.map((book, i) => (
+                      <FilteredRow
+                        key={book.id}
+                        book={book}
+                        onAdd={handleAddBook}
+                        last={i === results.filteredBooks!.length - 1}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
