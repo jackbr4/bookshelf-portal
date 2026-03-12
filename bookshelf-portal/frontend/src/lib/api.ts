@@ -87,6 +87,7 @@ export async function search(query: string): Promise<SearchResults> {
   return {
     books: (data.books ?? []).map(mapBook),
     series: (data.series ?? []).map(mapSeries),
+    filteredBooks: (data.filtered_books ?? []).map(mapBook),
   };
 }
 
