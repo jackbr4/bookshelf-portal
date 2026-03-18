@@ -37,6 +37,7 @@ function mapBook(b: any): BookResult {
     status: b.status,
     foreignAuthorId: b.foreign_author_id,
     foreignEditionId: b.foreign_edition_id,
+    language: b.language,
   };
 }
 

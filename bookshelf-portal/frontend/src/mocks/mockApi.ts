@@ -3,12 +3,15 @@ import type { SearchResults, AuthResponse, AddResponse, BookResult, SeriesResult
 const MOCK_PASSWORD = 'family';
 
 const MOCK_BOOKS: BookResult[] = [
-  { id: 'book_1', title: 'Dune', author: 'Frank Herbert', year: 1965, seriesName: 'Dune', status: 'available' },
-  { id: 'book_2', title: 'Dune Messiah', author: 'Frank Herbert', year: 1969, seriesName: 'Dune', status: 'already_in_library' },
-  { id: 'book_3', title: 'The Way of Kings', author: 'Brandon Sanderson', year: 2010, seriesName: 'The Stormlight Archive', status: 'available' },
-  { id: 'book_4', title: 'Words of Radiance', author: 'Brandon Sanderson', year: 2014, seriesName: 'The Stormlight Archive', status: 'already_monitored' },
-  { id: 'book_5', title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, status: 'available' },
-  { id: 'book_6', title: 'The Martian', author: 'Andy Weir', year: 2011, status: 'already_in_library' },
+  { id: 'book_1', title: 'Dune', author: 'Frank Herbert', year: 1965, seriesName: 'Dune', status: 'available', language: 'en' },
+  { id: 'book_2', title: 'Dune Messiah', author: 'Frank Herbert', year: 1969, seriesName: 'Dune', status: 'already_in_library', language: 'en' },
+  { id: 'book_3', title: 'The Way of Kings', author: 'Brandon Sanderson', year: 2010, seriesName: 'The Stormlight Archive', status: 'available', language: 'en' },
+  { id: 'book_4', title: 'Words of Radiance', author: 'Brandon Sanderson', year: 2014, seriesName: 'The Stormlight Archive', status: 'already_monitored', language: 'en' },
+  { id: 'book_5', title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, status: 'available', language: 'en' },
+  { id: 'book_6', title: 'The Martian', author: 'Andy Weir', year: 2011, status: 'already_in_library', language: 'en' },
+  { id: 'book_7', title: 'Wiedźmin: Ostatnie życzenie', author: 'Andrzej Sapkowski', year: 1993, seriesName: 'Wiedźmin', status: 'available', language: 'pl' },
+  { id: 'book_8', title: 'Krew elfów', author: 'Andrzej Sapkowski', year: 1994, seriesName: 'Wiedźmin', status: 'available', language: 'pl' },
+  { id: 'book_9', title: 'De Ontdekking van de Hemel', author: 'Harry Mulisch', year: 1992, status: 'available', language: 'nl' },
 ];
 
 const MOCK_SERIES: SeriesResult[] = [

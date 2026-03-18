@@ -42,6 +42,7 @@ bookshelf = BookshelfClient(
     base_url=settings.bookshelf_base_url,
     api_key=settings.bookshelf_api_key,
     mock_mode=settings.mock_mode,
+    google_books_api_key=settings.google_books_api_key,
 )
 
 
