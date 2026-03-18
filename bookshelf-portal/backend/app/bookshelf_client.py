@@ -22,11 +22,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MOCK_BOOKS = [
-    BookResult(id="book_1", title="Dune", author="Frank Herbert", year=1965, series_name="Dune", status=ItemStatus.available),
-    BookResult(id="book_2", title="Dune Messiah", author="Frank Herbert", year=1969, series_name="Dune", status=ItemStatus.already_in_library),
-    BookResult(id="book_3", title="The Way of Kings", author="Brandon Sanderson", year=2010, series_name="The Stormlight Archive", status=ItemStatus.available),
-    BookResult(id="book_4", title="Words of Radiance", author="Brandon Sanderson", year=2014, series_name="The Stormlight Archive", status=ItemStatus.already_monitored),
-    BookResult(id="book_5", title="Project Hail Mary", author="Andy Weir", year=2021, status=ItemStatus.available),
+    BookResult(id="book_1", title="Dune", author="Frank Herbert", year=1965, series_name="Dune", status=ItemStatus.available, language="en"),
+    BookResult(id="book_2", title="Dune Messiah", author="Frank Herbert", year=1969, series_name="Dune", status=ItemStatus.already_in_library, language="en"),
+    BookResult(id="book_3", title="The Way of Kings", author="Brandon Sanderson", year=2010, series_name="The Stormlight Archive", status=ItemStatus.available, language="en"),
+    BookResult(id="book_4", title="Words of Radiance", author="Brandon Sanderson", year=2014, series_name="The Stormlight Archive", status=ItemStatus.already_monitored, language="en"),
+    BookResult(id="book_5", title="Project Hail Mary", author="Andy Weir", year=2021, status=ItemStatus.available, language="en"),
+    BookResult(id="book_6", title="The Last Wish", author="Andrzej Sapkowski", year=1993, series_name="The Witcher", status=ItemStatus.available, language="en"),
+    BookResult(id="book_7", title="Ostatnie życzenie", author="Andrzej Sapkowski", year=1993, series_name="Wiedźmin", status=ItemStatus.available, language="pl"),
+    BookResult(id="book_8", title="Krew elfów", author="Andrzej Sapkowski", year=1994, series_name="Wiedźmin", status=ItemStatus.available, language="pl"),
+    BookResult(id="book_9", title="De Ontdekking van de Hemel", author="Harry Mulisch", year=1992, status=ItemStatus.available, language="nl"),
 ]
 
 # Series mock kept for future use when series search is redesigned.
@@ -84,10 +88,11 @@ def _parse_author_name(author_title: str) -> str:
 
 
 class BookshelfClient:
-    def __init__(self, base_url: str, api_key: str, mock_mode: bool = False):
+    def __init__(self, base_url: str, api_key: str, mock_mode: bool = False, google_books_api_key: Optional[str] = None):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.mock_mode = mock_mode
+        self._google_books_api_key = google_books_api_key
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={"X-Api-Key": self.api_key},
@@ -100,6 +105,11 @@ class BookshelfClient:
             base_url="https://openlibrary.org",
             timeout=10.0,
         )
+        # Separate client for Google Books (no auth required; key passed as param)
+        self._gb_client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com",
+            timeout=10.0,
+        )
 
     # -----------------------------------------------------------------------
     # Public API
@@ -110,9 +120,10 @@ class BookshelfClient:
             return self._mock_search(query)
 
         try:
-            # Run Bookshelf lookup and library fetch concurrently.
-            raw_books, library_books = await asyncio.gather(
+            # Run Bookshelf lookup, Google Books enrichment, and library fetch concurrently.
+            raw_books, gb_books, library_books = await asyncio.gather(
                 self._lookup_books(query),
+                self._search_google_books(query),
                 self._get_library_books(),
             )
 
@@ -120,7 +131,12 @@ class BookshelfClient:
                 logger.info("[search] Bookshelf returned no results — trying Open Library fallback")
                 raw_books = await self._search_open_library(query)
 
-            results, filtered_out = search_books(query, raw_books, library_books)
+            # Bookshelf results first so they win dedup tiebreaks over gb: IDs.
+            all_raw = raw_books + gb_books
+            logger.info("[search] merged raw results: bookshelf=%d gb=%d total=%d",
+                        len(raw_books), len(gb_books), len(all_raw))
+
+            results, filtered_out = search_books(query, all_raw, library_books)
             books = [self._adapter_result_to_book_result(r) for r in results]
             filtered_books = [self._adapter_result_to_book_result(r) for r in filtered_out]
 
@@ -364,6 +380,61 @@ class BookshelfClient:
             "seriesTitle": None,
         }
 
+    async def _search_google_books(self, query: str) -> list[dict]:
+        """
+        Search Google Books as a parallel enrichment source alongside Bookshelf.
+
+        Returns results mapped to the same raw-dict shape as _open_library_to_raw_dict,
+        with foreignBookId prefixed "gb:" so the add flow knows to re-lookup in
+        Bookshelf by title at add time.
+
+        Requests up to 40 results to maximise language coverage (English + Polish + Dutch).
+        Uses GOOGLE_BOOKS_API_KEY if configured; falls back to unauthenticated (1000 req/day cap).
+        """
+        try:
+            params: dict = {"q": query, "maxResults": 40}
+            if self._google_books_api_key:
+                params["key"] = self._google_books_api_key
+            resp = await self._gb_client.get("/books/v1/volumes", params=params)
+            if resp.status_code != 200:
+                logger.warning("[gb] search returned %s for %r", resp.status_code, query)
+                return []
+            items = resp.json().get("items") or []
+            logger.info("[gb] returned %d items for %r", len(items), query)
+            return [
+                self._google_books_to_raw_dict(i)
+                for i in items
+                if i.get("volumeInfo", {}).get("title")
+            ]
+        except Exception as e:
+            logger.warning("[gb] search failed for %r: %s", query, e)
+            return []
+
+    @staticmethod
+    def _google_books_to_raw_dict(item: dict) -> dict:
+        """Map a Google Books volume to the internal raw-book dict shape."""
+        info = item.get("volumeInfo", {})
+        authors = info.get("authors") or []
+        author_name = authors[0] if authors else ""
+
+        cover_url = info.get("imageLinks", {}).get("thumbnail")
+        # Google Books thumbnails sometimes come back as http — upgrade to https
+        if cover_url and cover_url.startswith("http://"):
+            cover_url = "https://" + cover_url[7:]
+
+        published_date = info.get("publishedDate", "") or ""
+
+        return {
+            "foreignBookId": f"gb:{item.get('id', '')}",
+            "title": info.get("title", ""),
+            "authorName": author_name,
+            "releaseDate": published_date if published_date else None,
+            "remoteCover": cover_url,
+            "language": info.get("language"),
+            "foreignEditionId": None,
+            "seriesTitle": None,
+        }
+
     async def _lookup_foreign_author_id(self, author_name: str) -> Optional[str]:
         try:
             resp = await self._client.get("/api/v1/author/lookup", params={"term": author_name})
@@ -389,6 +460,7 @@ class BookshelfClient:
         for the title+author query — Bookshelf orders by relevance so first is best.
         """
         is_ol_id = foreign_book_id.startswith("ol:")
+        is_gb_id = foreign_book_id.startswith("gb:")
 
         search_terms = []
         if title:
@@ -403,11 +475,12 @@ class BookshelfClient:
                     data = resp.json()
                     books = [b for b in (data if isinstance(data, list) else [data]) if isinstance(b, dict)]
 
-                    if is_ol_id:
-                        # For OL results take the first (most relevant) Bookshelf match
+                    if is_ol_id or is_gb_id:
+                        # For OL/GB results take the first (most relevant) Bookshelf match
                         if books:
-                            logger.info("OL add: using first Bookshelf result for %r (id=%s)",
-                                        term, books[0].get("foreignBookId"))
+                            source = "OL" if is_ol_id else "GB"
+                            logger.info("%s add: using first Bookshelf result for %r (id=%s)",
+                                        source, term, books[0].get("foreignBookId"))
                             return books[0]
                     else:
                         for book in books:
@@ -460,6 +533,7 @@ class BookshelfClient:
             status=status,
             foreign_author_id=None,  # resolved at add time via author lookup
             foreign_edition_id=result.foreign_edition_id,
+            language=result.language,
         )
 
     # -----------------------------------------------------------------------
