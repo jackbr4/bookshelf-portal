@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MIN_SCORE_THRESHOLD = 10
-MAX_RESULTS = 10
+MAX_RESULTS = 20
 
 # Edition-noise patterns stripped during normalisation (for scoring only —
 # the display title is never mutated).
@@ -257,19 +257,18 @@ def score_result(query: str, query_tokens: list[str], result: SearchBookResult) 
     else:
         score -= 20
 
-    # Author token bonus (useful for "george martin game of thrones" style queries)
+    # Author token bonus (useful for "george martin game of thrones" style queries).
+    # If ALL query tokens match the author (pure author-name query), give a large
+    # boost so those books aren't buried by the fuzzy-title mismatch penalty.
     if query_tokens and author:
         hits = sum(1 for tok in query_tokens if tok in author)
-        if hits:
+        if hits == len(query_tokens):
+            score += 40  # pure author search — all tokens found in author name
+        elif hits:
             score += min(hits * 10, 20)
 
-    # Language preference
-    if result.language:
-        lang = result.language.lower().strip()
-        if lang in _ENGLISH_LANG:
-            score += 15
-        else:
-            score -= 20
+    # Language is no longer a scoring factor — results are grouped by language
+    # on the frontend instead of being penalised/boosted here.
 
     # Series name relevance (weak signal)
     if result.series_name and nq:
@@ -295,15 +294,30 @@ def score_result(query: str, query_tokens: list[str], result: SearchBookResult) 
 # Grouping (deduplicate editions)
 # ---------------------------------------------------------------------------
 
+def _is_native_id(foreign_id: Optional[str]) -> bool:
+    """Return True if the ID is a native Bookshelf ID (not an ol: or gb: prefixed fallback)."""
+    if not foreign_id:
+        return False
+    return not (foreign_id.startswith("ol:") or foreign_id.startswith("gb:"))
+
+
 def group_duplicate_editions(results: list[SearchBookResult]) -> list[SearchBookResult]:
     """
     Keep only the highest-scoring result per (normalised_title, normalised_author) pair.
     This collapses multiple editions of the same book into one display row.
+
+    Native Bookshelf IDs receive a small tiebreak bonus so that when a Bookshelf
+    result and a Google Books / Open Library result score similarly, the native ID
+    wins — meaning the add flow can proceed directly rather than falling back to
+    a title re-lookup.
     """
+    def effective_score(r: SearchBookResult) -> float:
+        return r.score + (5.0 if _is_native_id(r.foreign_id) else 0.0)
+
     best: dict[str, SearchBookResult] = {}
     for result in results:
         key = f"{result.normalized_title}::{result.normalized_author}"
-        if key not in best or result.score > best[key].score:
+        if key not in best or effective_score(result) > effective_score(best[key]):
             best[key] = result
     return list(best.values())
 
@@ -349,6 +363,69 @@ def annotate_existing_or_monitored(
         if pair in title_author_set:
             result.can_add = False
             result.status_label = "already_in_library"
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Language enrichment
+# ---------------------------------------------------------------------------
+
+# Characters that are highly distinctive to Polish — ó/ć/ń are excluded because
+# they appear in Hungarian, Spanish, Czech, and other languages too.
+_POLISH_CHARS = frozenset("ąęłśżźĄĘŁŚŻŹ")
+
+
+def _infer_language_from_title(title: str) -> Optional[str]:
+    """
+    Infer language from characters in the title when metadata is absent.
+    Polish diacritics (ą ć ę ł ń ó ś ź ż) are highly distinctive and
+    essentially only appear in Polish — low false-positive risk.
+    """
+    if any(c in _POLISH_CHARS for c in title):
+        return "pl"
+    return None
+
+
+def enrich_language(
+    results: list[SearchBookResult],
+    source_pool: list[SearchBookResult],
+) -> list[SearchBookResult]:
+    """
+    For results with no language tag (typically Bookshelf-native results),
+    infer language via two strategies in order:
+
+    1. Google Books match — find a result in source_pool with the same author
+       and overlapping title that does have a language tag. Handles cases like:
+         Bookshelf: "De Laatste Wens"
+         Google Books: "De laatste wens ; Het zwaard der voorzienigheid" (nl)
+
+    2. Title character heuristic — Polish diacritics in the title reliably
+       indicate a Polish original when no external match is available.
+    """
+    lang_pool: dict[str, list[tuple[str, str]]] = {}
+    for r in source_pool:
+        if r.language and r.normalized_author:
+            lang_pool.setdefault(r.normalized_author, []).append(
+                (r.normalized_title, r.language)
+            )
+
+    for result in results:
+        if result.language:
+            continue
+
+        # Strategy 1: match against a source-pool result with language data
+        if result.normalized_author:
+            for cand_title, cand_lang in lang_pool.get(result.normalized_author, []):
+                if (result.normalized_title and cand_title and
+                        (result.normalized_title in cand_title or
+                         cand_title in result.normalized_title)):
+                    result.language = cand_lang
+                    break
+
+        # Strategy 2: Polish character heuristic
+        if not result.language and result.title:
+            result.language = _infer_language_from_title(result.title)
 
     return results
 
@@ -401,6 +478,12 @@ def search_books(
     grouped = group_duplicate_editions(kept)
     filtered_out = group_duplicate_editions(below)
     logger.info("[search] after_dedup=%d  filtered_out_dedup=%d", len(grouped), len(filtered_out))
+
+    # --- Language enrichment ---
+    # Propagate language tags from Google Books results to Bookshelf-native
+    # results that lack language metadata, using author + title overlap matching.
+    enrich_language(grouped, normalised)
+    enrich_language(filtered_out, normalised)
 
     # --- Rank ---
     ranked = sorted(grouped, key=lambda r: r.score, reverse=True)

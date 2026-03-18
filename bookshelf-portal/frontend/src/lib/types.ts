@@ -10,6 +10,7 @@ export interface BookResult {
   status: ItemStatus;
   foreignAuthorId?: string | null;
   foreignEditionId?: string | null;
+  language?: string | null;
 }
 
 export interface SeriesResult {
