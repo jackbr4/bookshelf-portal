@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     mock_mode: bool = True
     port: int = 8788
     allowed_origins: List[str] = ["http://localhost:5173", "http://localhost:4173"]
+    google_books_api_key: Optional[str] = None
 
     class Config:
         env_file = ".env"

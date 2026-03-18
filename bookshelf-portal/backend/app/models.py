@@ -19,6 +19,7 @@ class BookResult(BaseModel):
     status: ItemStatus
     foreign_author_id: Optional[str] = None
     foreign_edition_id: Optional[str] = None
+    language: Optional[str] = None
 
 
 class SeriesResult(BaseModel):
