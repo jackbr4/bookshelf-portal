@@ -188,8 +188,14 @@ class BookshelfClient:
                 "qualityProfileId": quality_profile_id,
                 "metadataProfileId": metadata_profile_id,
                 "rootFolderPath": root_folder,
-                "monitored": True,
-                "monitorNewItems": "new",
+                # Add the author as UNMONITORED so Bookshelf catalogs their
+                # library without immediately searching every book.  The
+                # specific book is monitored at the book level below, and
+                # searchForNewBook triggers the download for that book only.
+                "monitored": False,
+                # "none" prevents future publications by this author from
+                # being auto-monitored — users should request explicitly.
+                "monitorNewItems": "none",
             }
             payload["editions"] = [{
                 "foreignEditionId": raw_book.get("foreignEditionId", foreign_edition_id or ""),
@@ -206,7 +212,7 @@ class BookshelfClient:
                 raise HTTPException(status_code=502, detail="BOOKSHELF_ERROR")
 
             book_resp = resp.json()
-            asyncio.create_task(self._delayed_fix_monitoring(book_resp, book_id))
+            asyncio.create_task(self._confirm_monitoring(book_resp))
             return AddResponse(ok=True, message="Book added successfully")
 
         except HTTPException:
@@ -540,48 +546,86 @@ class BookshelfClient:
     # Monitoring fix (post-add background task)
     # -----------------------------------------------------------------------
 
-    async def _delayed_fix_monitoring(self, book_resp: dict, foreign_book_id: str) -> None:
-        """Wait for Bookshelf to finish async book discovery, then fix monitoring."""
-        await asyncio.sleep(30)
-        await self._fix_book_monitoring(book_resp, foreign_book_id)
+    async def _confirm_monitoring(self, book_resp: dict) -> None:
+        """
+        Safety net that runs after a book add.
 
-    async def _fix_book_monitoring(self, book_resp: dict, foreign_book_id: str) -> None:
-        """Ensure only the requested book is monitored, not the entire author catalog."""
+        Because the author is now added as unmonitored, other books in their
+        catalog should never become monitored in the first place.  This task:
+
+          1. Polls until the author's books appear in the library (Bookshelf
+             catalogs them asynchronously, typically within 3–15 seconds).
+          2. Confirms the target book is monitored — sets it if not.
+          3. Unmonitors any other book that somehow ended up monitored
+             (guards against edge cases / Bookshelf behaviour changes).
+
+        For authors that already existed in the library before this add
+        (age > 60s), step 3 is skipped to avoid disturbing previously
+        requested books.
+        """
+        book_internal_id = book_resp.get("id")
+        author_id = book_resp.get("authorId")
+        author_added_str = (book_resp.get("author") or {}).get("added", "")
+
+        if not (book_internal_id and author_id):
+            return
+
         try:
-            book_internal_id = book_resp.get("id")
-            author_id = book_resp.get("authorId")
-            author_added_str = (book_resp.get("author") or {}).get("added", "")
+            # Poll until the author's catalog is populated, up to ~45 seconds.
+            # We check every 3 seconds; typical catalog import takes 5–15s.
+            books: list[dict] = []
+            for attempt in range(15):
+                await asyncio.sleep(3)
+                try:
+                    r = await self._client.get("/api/v1/book", params={"authorId": author_id}, timeout=10.0)
+                    if r.is_success:
+                        books = r.json() if isinstance(r.json(), list) else []
+                        if books:
+                            logger.info("[monitor] author catalog populated: %d books (attempt %d)",
+                                        len(books), attempt + 1)
+                            break
+                except Exception as e:
+                    logger.warning("[monitor] poll attempt %d failed: %s", attempt + 1, e)
 
-            if not (book_internal_id and author_id):
+            if not books:
+                logger.warning("[monitor] author catalog never populated for authorId=%s", author_id)
+                # Still ensure the target book is monitored even if we couldn't list others.
+                await self._client.put("/api/v1/book/monitor", json={
+                    "bookIds": [book_internal_id], "monitored": True,
+                })
                 return
 
-            await self._client.put("/api/v1/book/monitor", json={
-                "bookIds": [book_internal_id],
-                "monitored": True,
-            })
+            # Step 2 — ensure the target book is monitored.
+            target = next((b for b in books if b.get("id") == book_internal_id), None)
+            if not target or not target.get("monitored"):
+                logger.info("[monitor] setting target book %s to monitored", book_internal_id)
+                await self._client.put("/api/v1/book/monitor", json={
+                    "bookIds": [book_internal_id], "monitored": True,
+                })
 
+            # Step 3 — skip for pre-existing authors (their monitored books are intentional).
             if author_added_str:
                 added_dt = datetime.fromisoformat(author_added_str.replace("Z", "+00:00"))
                 age_seconds = (datetime.now(timezone.utc) - added_dt).total_seconds()
                 if age_seconds > 60:
-                    logger.info("Author already existed (%ds old), leaving other books unchanged", int(age_seconds))
+                    logger.info("[monitor] author pre-existed (%ds), skipping unmonitor sweep", int(age_seconds))
                     return
 
-            books_resp = await self._client.get("/api/v1/book", params={"authorId": author_id})
-            if not books_resp.is_success:
-                return
             to_unmonitor = [
-                b["id"] for b in books_resp.json()
+                b["id"] for b in books
                 if b.get("monitored") and b.get("id") != book_internal_id
             ]
             if to_unmonitor:
-                logger.info("Unmonitoring %d other books for new author (id=%s)", len(to_unmonitor), author_id)
+                logger.info("[monitor] unmonitoring %d unexpected books for new author %s",
+                            len(to_unmonitor), author_id)
                 await self._client.put("/api/v1/book/monitor", json={
-                    "bookIds": to_unmonitor,
-                    "monitored": False,
+                    "bookIds": to_unmonitor, "monitored": False,
                 })
+            else:
+                logger.info("[monitor] clean — no unwanted monitored books found")
+
         except Exception as e:
-            logger.warning("Monitoring cleanup failed (non-fatal): %s", e)
+            logger.warning("[monitor] confirmation task failed (non-fatal): %s", e)
 
     # -----------------------------------------------------------------------
     # Mock search
