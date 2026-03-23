@@ -71,7 +71,7 @@ describe('SearchPanel', () => {
   it('calls onSearch with query', async () => {
     const onSearch = vi.fn()
     render(<SearchPanel onSearch={onSearch} loading={false} />)
-    await userEvent.type(screen.getByPlaceholderText('Search for a book or series'), 'Dune')
+    await userEvent.type(screen.getByPlaceholderText('Search for a book'), 'Dune')
     fireEvent.click(screen.getByText('Search'))
     expect(onSearch).toHaveBeenCalledWith('Dune')
   })
