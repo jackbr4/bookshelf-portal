@@ -177,7 +177,7 @@ export default function RequestRoute() {
       <header className="bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
         <div>
           <h1 className="h5 mb-0 fw-semibold">Book Request Portal</h1>
-          <p className="text-muted mb-0" style={{ fontSize: '13px' }}>Request a book or series for download</p>
+          <p className="text-muted mb-0" style={{ fontSize: '13px' }}>Request a book for download</p>
         </div>
         <PortalButton variant="outline-secondary" size="sm" onClick={handleLogout}>
           Sign out
