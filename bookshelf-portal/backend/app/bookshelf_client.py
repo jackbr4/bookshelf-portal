@@ -100,6 +100,10 @@ class BookshelfClient:
         )
         # In-memory library cache: (books_list, fetched_at_monotonic)
         self._library_cache: tuple[list[dict], float] | None = None
+        # Short-lived lookup cache: {foreignBookId: (raw_book_dict, fetched_at_monotonic)}
+        # Populated during search so add-book can reuse the result without a second Goodreads hit.
+        self._book_lookup_cache: dict[str, tuple[dict, float]] = {}
+        self._BOOK_CACHE_TTL = 600  # 10 minutes
         # Separate client for Open Library (no auth, different base URL)
         self._ol_client = httpx.AsyncClient(
             base_url="https://openlibrary.org",
@@ -170,6 +174,16 @@ class BookshelfClient:
                         raw_book.get("foreignBookId"), raw_book.get("foreignEditionId"))
 
             resolved_author_id = foreign_author_id
+
+            # Prefer foreignAuthorId already embedded in the lookup result — avoids
+            # an extra round-trip to Bookshelf/Goodreads, which is the most common
+            # failure point when Bookshelf is intermittently slow.
+            if not resolved_author_id and isinstance(raw_book.get("author"), dict):
+                fid = raw_book["author"].get("foreignAuthorId")
+                if fid:
+                    resolved_author_id = str(fid)
+
+            # Fall back to a separate author lookup only if still unresolved.
             if not resolved_author_id:
                 author_name = (
                     _parse_author_name(raw_book["authorTitle"]) if raw_book.get("authorTitle")
@@ -278,6 +292,11 @@ class BookshelfClient:
                     data = resp.json()
                     results = data if isinstance(data, list) else []
                     logger.info("[lookup] attempt %d returned %d results", attempt + 1, len(results))
+                    now = time.monotonic()
+                    for book in results:
+                        fid = str(book.get("foreignBookId") or "")
+                        if fid:
+                            self._book_lookup_cache[fid] = (book, now)
                     return results
                 if resp.status_code >= 500:
                     logger.warning("[lookup] attempt %d got %s for %r — trying fallback",
@@ -442,14 +461,22 @@ class BookshelfClient:
         }
 
     async def _lookup_foreign_author_id(self, author_name: str) -> Optional[str]:
-        try:
-            resp = await self._client.get("/api/v1/author/lookup", params={"term": author_name})
-            if resp.status_code == 200:
-                authors = resp.json()
-                if authors:
-                    return str(authors[0].get("foreignAuthorId", ""))
-        except Exception as e:
-            logger.warning("Author lookup failed for %r: %s", author_name, e)
+        names_to_try = [author_name]
+        parts = author_name.split()
+        if len(parts) > 1:
+            names_to_try.append(parts[-1])  # last name only as a fallback
+
+        for name in names_to_try:
+            try:
+                resp = await self._client.get("/api/v1/author/lookup", params={"term": name})
+                if resp.status_code == 200:
+                    authors = resp.json()
+                    if authors:
+                        fid = authors[0].get("foreignAuthorId")
+                        if fid:
+                            return str(fid)
+            except Exception as e:
+                logger.warning("Author lookup failed for %r: %s", name, e)
         return None
 
     async def _fetch_lookup_result(
@@ -467,6 +494,13 @@ class BookshelfClient:
         """
         is_ol_id = foreign_book_id.startswith("ol:")
         is_gb_id = foreign_book_id.startswith("gb:")
+
+        # For native IDs, check the lookup cache populated during search.
+        if not is_ol_id and not is_gb_id:
+            cached = self._book_lookup_cache.get(foreign_book_id)
+            if cached and (time.monotonic() - cached[1]) < self._BOOK_CACHE_TTL:
+                logger.info("[fetch] cache hit for book %s (skipping Goodreads lookup)", foreign_book_id)
+                return cached[0]
 
         search_terms = []
         if title:
@@ -529,6 +563,10 @@ class BookshelfClient:
         else:
             status = ItemStatus.available
 
+        raw_author = result.raw.get("author") if isinstance(result.raw.get("author"), dict) else {}
+        fid = raw_author.get("foreignAuthorId")
+        foreign_author_id = str(fid) if fid else None
+
         return BookResult(
             id=result.foreign_id or "",
             title=result.title,
@@ -537,7 +575,7 @@ class BookshelfClient:
             series_name=result.series_name,
             cover_url=result.cover_url,
             status=status,
-            foreign_author_id=None,  # resolved at add time via author lookup
+            foreign_author_id=foreign_author_id,
             foreign_edition_id=result.foreign_edition_id,
             language=result.language,
         )
