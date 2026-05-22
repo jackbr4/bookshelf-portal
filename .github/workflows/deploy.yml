@@ -19,7 +19,8 @@ jobs:
             cd ~/apps/bookshelf-portal
 
             echo "Pulling latest code..."
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "Building container..."
             podman build -t bookshelf-request-portal ./bookshelf-portal
