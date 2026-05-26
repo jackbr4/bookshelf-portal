@@ -641,7 +641,19 @@ class BookshelfClient:
                     "bookIds": [book_internal_id], "monitored": True,
                 })
 
-            # Step 3 — skip for pre-existing authors (their monitored books are intentional).
+            # Step 3 — trigger an immediate search for the target book.
+            try:
+                sr = await self._client.post("/api/v1/command", json={
+                    "name": "BookSearch", "bookIds": [book_internal_id],
+                })
+                if sr.is_success:
+                    logger.info("[monitor] BookSearch triggered for book %s", book_internal_id)
+                else:
+                    logger.warning("[monitor] BookSearch trigger failed: %s", sr.status_code)
+            except Exception as se:
+                logger.warning("[monitor] BookSearch trigger error (non-fatal): %s", se)
+
+            # Step 4 — skip for pre-existing authors (their monitored books are intentional).
             if author_added_str:
                 added_dt = datetime.fromisoformat(author_added_str.replace("Z", "+00:00"))
                 age_seconds = (datetime.now(timezone.utc) - added_dt).total_seconds()
