@@ -16,10 +16,12 @@ from slowapi.errors import RateLimitExceeded
 from .settings import settings
 from .bookshelf_client import BookshelfClient
 from .history import HistoryDB
+from .prowlarr_client import ProwlarrClient
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
     AddBookRequest, AddSeriesRequest, AddResponse,
+    ReleaseItem, ReleasesResponse,
     HistoryItem, HistoryResponse,
 )
 from .auth import get_session, create_session_token
@@ -48,6 +50,11 @@ bookshelf = BookshelfClient(
 )
 
 history_db = HistoryDB(settings.history_db_path)
+
+prowlarr = ProwlarrClient(
+    base_url=settings.prowlarr_base_url,
+    api_key=settings.prowlarr_api_key,
+)
 
 
 @app.post("/portal/auth", response_model=AuthResponse)
@@ -116,6 +123,23 @@ async def add_series(body: AddSeriesRequest, request: Request, session=Depends(g
     except Exception as e:
         logger.error("Add series error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to add series")
+
+
+@app.get("/portal/releases", response_model=ReleasesResponse)
+async def get_releases(title: str, author: str, request: Request, session=Depends(get_session)):
+    if not title.strip():
+        raise HTTPException(status_code=400, detail="title is required")
+
+    logger.info("Release search: title=%r author=%r", title, author)
+    try:
+        accepted, rejected = await prowlarr.search_releases(title.strip(), author.strip())
+        return ReleasesResponse(
+            accepted=[ReleaseItem(**r.to_dict()) for r in accepted],
+            rejected=[ReleaseItem(**r.to_dict()) for r in rejected],
+        )
+    except Exception as e:
+        logger.error("Release search error: %s", e)
+        raise HTTPException(status_code=502, detail="Release search failed")
 
 
 @app.get("/portal/history", response_model=HistoryResponse)

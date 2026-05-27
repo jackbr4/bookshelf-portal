@@ -64,6 +64,27 @@ class AddResponse(BaseModel):
     message: str
 
 
+class ReleaseItem(BaseModel):
+    guid: str
+    title: str
+    indexer: str
+    protocol: str
+    size_mb: float
+    detected_format: Optional[str] = None
+    seeders: Optional[int] = None
+    age_days: Optional[int] = None
+    download_url: str
+    publish_date: Optional[str] = None
+    score: int = 0
+    rejected: bool = False
+    reject_reason: Optional[str] = None
+
+
+class ReleasesResponse(BaseModel):
+    accepted: List[ReleaseItem]
+    rejected: List[ReleaseItem]
+
+
 class HistoryItem(BaseModel):
     id: str
     title: str
