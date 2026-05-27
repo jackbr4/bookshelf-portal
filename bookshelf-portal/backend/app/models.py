@@ -62,3 +62,20 @@ class AddSeriesRequest(BaseModel):
 class AddResponse(BaseModel):
     ok: bool
     message: str
+
+
+class HistoryItem(BaseModel):
+    id: str
+    title: str
+    author: str
+    release_title: Optional[str] = None
+    indexer: Optional[str] = None
+    protocol: Optional[str] = None
+    status: str
+    created_at: str
+    updated_at: str
+    error: Optional[str] = None
+
+
+class HistoryResponse(BaseModel):
+    items: List[HistoryItem]

@@ -15,10 +15,12 @@ from slowapi.errors import RateLimitExceeded
 
 from .settings import settings
 from .bookshelf_client import BookshelfClient
+from .history import HistoryDB
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
-    AddBookRequest, AddSeriesRequest, AddResponse
+    AddBookRequest, AddSeriesRequest, AddResponse,
+    HistoryItem, HistoryResponse,
 )
 from .auth import get_session, create_session_token
 
@@ -44,6 +46,8 @@ bookshelf = BookshelfClient(
     mock_mode=settings.mock_mode,
     google_books_api_key=settings.google_books_api_key,
 )
+
+history_db = HistoryDB(settings.history_db_path)
 
 
 @app.post("/portal/auth", response_model=AuthResponse)
@@ -112,6 +116,12 @@ async def add_series(body: AddSeriesRequest, request: Request, session=Depends(g
     except Exception as e:
         logger.error("Add series error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to add series")
+
+
+@app.get("/portal/history", response_model=HistoryResponse)
+async def get_history(session=Depends(get_session)):
+    items = history_db.get_recent(limit=50)
+    return HistoryResponse(items=[HistoryItem(**i) for i in items])
 
 
 @app.get("/health")
