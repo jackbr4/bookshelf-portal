@@ -17,11 +17,13 @@ from .settings import settings
 from .bookshelf_client import BookshelfClient
 from .history import HistoryDB
 from .prowlarr_client import ProwlarrClient
+from .download_client import DownloadClient
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
     AddBookRequest, AddSeriesRequest, AddResponse,
     ReleaseItem, ReleasesResponse,
+    DownloadRequest, DownloadResponse,
     HistoryItem, HistoryResponse,
 )
 from .auth import get_session, create_session_token
@@ -54,6 +56,18 @@ history_db = HistoryDB(settings.history_db_path)
 prowlarr = ProwlarrClient(
     base_url=settings.prowlarr_base_url,
     api_key=settings.prowlarr_api_key,
+)
+
+download_client = DownloadClient(
+    rtorrent_url=settings.rtorrent_url,
+    rtorrent_user=settings.rtorrent_user,
+    rtorrent_password=settings.rtorrent_password,
+    rtorrent_download_dir=settings.rtorrent_download_dir,
+    rtorrent_category=settings.rtorrent_category,
+    rtorrent_imported_category=settings.rtorrent_imported_category,
+    sabnzbd_base_url=settings.sabnzbd_base_url,
+    sabnzbd_api_key=settings.sabnzbd_api_key,
+    sabnzbd_category=settings.sabnzbd_category,
 )
 
 
@@ -123,6 +137,34 @@ async def add_series(body: AddSeriesRequest, request: Request, session=Depends(g
     except Exception as e:
         logger.error("Add series error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to add series")
+
+
+@app.post("/portal/download", response_model=DownloadResponse)
+async def dispatch_download(body: DownloadRequest, request: Request, session=Depends(get_session)):
+    logger.info("Download dispatch: %r by %r via %s", body.title, body.author, body.protocol)
+    try:
+        download_id = await download_client.dispatch(
+            protocol=body.protocol,
+            download_url=body.download_url,
+            title=body.title,
+        )
+        record_id = history_db.create_download(
+            title=body.title,
+            author=body.author,
+            release_title=body.release_title,
+            indexer=body.indexer,
+            protocol=body.protocol,
+            download_id=download_id,
+        )
+        return DownloadResponse(
+            ok=True,
+            record_id=record_id,
+            download_id=download_id,
+            message=f"Sent to {'rTorrent' if body.protocol == 'torrent' else 'SABnzbd'}",
+        )
+    except Exception as e:
+        logger.error("Dispatch error: %s", e)
+        raise HTTPException(status_code=502, detail=f"Dispatch failed: {e}")
 
 
 @app.get("/portal/releases", response_model=ReleasesResponse)

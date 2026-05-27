@@ -85,6 +85,22 @@ class ReleasesResponse(BaseModel):
     rejected: List[ReleaseItem]
 
 
+class DownloadRequest(BaseModel):
+    title: str
+    author: str
+    release_title: str
+    indexer: str
+    protocol: str
+    download_url: str
+
+
+class DownloadResponse(BaseModel):
+    ok: bool
+    record_id: str
+    download_id: str
+    message: str
+
+
 class HistoryItem(BaseModel):
     id: str
     title: str
