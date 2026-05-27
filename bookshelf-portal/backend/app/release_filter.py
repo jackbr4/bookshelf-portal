@@ -13,9 +13,9 @@ from typing import Optional
 # Config (move to settings.py / config.yaml if rules need user control)
 # ---------------------------------------------------------------------------
 
-ACCEPTED_FORMATS = {"epub", "mobi", "azw3"}
+ACCEPTED_FORMATS = {"epub", "pdf"}
 
-REJECTED_FORMATS = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4"}
+REJECTED_FORMATS = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4", "mobi", "azw3"}
 
 REJECTED_KEYWORDS = {
     "audiobook", "audio book", "abridged", "unabridged",
@@ -29,7 +29,7 @@ MIN_SIZE_BYTES = 512 * 1024        # 0.5 MB — below this is almost certainly j
 MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB — above this is likely an audiobook or bundle
 
 # Format score: higher wins
-FORMAT_SCORE = {"epub": 30, "azw3": 20, "mobi": 15, "pdf": 5}
+FORMAT_SCORE = {"epub": 30, "pdf": 5}
 
 # Indexer score bonus
 INDEXER_SCORE = {"myanonymouse": 10, "myanonmouse": 10, "mam": 10}
