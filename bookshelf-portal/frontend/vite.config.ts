@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/portal': {
-        target: 'http://localhost:8788',
+        target: 'http://localhost:8789',
         changeOrigin: true,
       },
     },
