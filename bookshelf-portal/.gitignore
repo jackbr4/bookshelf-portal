@@ -1,3 +1,6 @@
 backend/venv/
 history.dev.db
 history.db
+.env
+.env.*
+!.env.example
