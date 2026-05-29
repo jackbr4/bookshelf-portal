@@ -35,7 +35,13 @@ jobs:
             podman rm -f bookshelf-request-portal || true
 
             echo "Starting new container..."
-            podman run -d --name bookshelf-request-portal --restart=always --network=host --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env bookshelf-request-portal
+            podman run -d --name bookshelf-request-portal \
+              --restart=always \
+              --network=host \
+              --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env \
+              -v /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro \
+              -v /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db \
+              bookshelf-request-portal
 
             echo "Verifying..."
             sleep 10
