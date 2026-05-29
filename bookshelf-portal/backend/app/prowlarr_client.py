@@ -165,8 +165,10 @@ def _build_queries(title: str, author: str) -> list[str]:
     """
     Return 1-2 query strings to try. More queries = more results but slower.
 
+    Both title and author are optional; at least one must be non-empty.
     Primary:   "Title Author" — most specific, best relevance
     Fallback:  "Title" alone — catches releases that omit the author name
+               "Author" alone — when only author is provided
     """
     title = title.strip()
     author = author.strip()
@@ -176,4 +178,6 @@ def _build_queries(title: str, author: str) -> list[str]:
         queries.append(f"{title} {author}")
     if title:
         queries.append(title)
+    elif author:
+        queries.append(author)
     return queries

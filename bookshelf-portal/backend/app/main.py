@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from .settings import settings
 from .bookshelf_client import BookshelfClient
 from .calibre_library import CalibreLibrary
+from .test_page import TEST_PAGE_HTML
 from .history import HistoryDB
 from .prowlarr_client import ProwlarrClient
 from .download_client import DownloadClient
@@ -172,9 +173,9 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
 
 
 @app.get("/portal/releases", response_model=ReleasesResponse)
-async def get_releases(title: str, author: str, request: Request, session=Depends(get_session)):
-    if not title.strip():
-        raise HTTPException(status_code=400, detail="title is required")
+async def get_releases(request: Request, session=Depends(get_session), title: str = "", author: str = ""):
+    if not title.strip() and not author.strip():
+        raise HTTPException(status_code=400, detail="title or author is required")
 
     logger.info("Release search: title=%r author=%r", title, author)
     try:
@@ -192,6 +193,11 @@ async def get_releases(title: str, author: str, request: Request, session=Depend
 async def get_history(session=Depends(get_session)):
     items = history_db.get_recent(limit=50)
     return HistoryResponse(items=[HistoryItem(**i) for i in items])
+
+
+@app.get("/portal/test", response_class=HTMLResponse, include_in_schema=False)
+async def test_page():
+    return HTMLResponse(content=TEST_PAGE_HTML)
 
 
 @app.get("/health")
