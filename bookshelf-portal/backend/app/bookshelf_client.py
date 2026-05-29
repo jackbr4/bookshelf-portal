@@ -88,17 +88,21 @@ def _parse_author_name(author_title: str) -> str:
 
 
 class BookshelfClient:
-    def __init__(self, base_url: str, api_key: str, mock_mode: bool = False, google_books_api_key: Optional[str] = None):
+    def __init__(self, base_url: str, api_key: str, mock_mode: bool = False,
+                 google_books_api_key: Optional[str] = None,
+                 calibre_library=None):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.mock_mode = mock_mode
         self._google_books_api_key = google_books_api_key
+        self._calibre_library = calibre_library  # CalibreLibrary instance, or None
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={"X-Api-Key": self.api_key},
             timeout=30.0,
         )
         # In-memory library cache: (books_list, fetched_at_monotonic)
+        # Only used when falling back to the Bookshelf API (calibre_library is None).
         self._library_cache: tuple[list[dict], float] | None = None
         # Short-lived lookup cache: {foreignBookId: (raw_book_dict, fetched_at_monotonic)}
         # Populated during search so add-book can reuse the result without a second Goodreads hit.
@@ -323,16 +327,18 @@ class BookshelfClient:
 
     async def _get_library_books(self) -> list[dict]:
         """
-        Fetch all books currently in the Bookshelf library.
+        Return the books used to annotate search results with "already in library".
 
-        Results are cached in memory for _LIBRARY_CACHE_TTL seconds (5 min) so
-        that consecutive searches don't each pay the full round-trip cost.
-        If the fresh fetch times out or fails, the stale cache is returned so
-        search results are still annotated with library status.
+        When a CalibreLibrary is available (Phase 6+), reads directly from
+        metadata.db so the annotation reflects reality regardless of whether
+        Bookshelf knows about a book.  Falls back to the Bookshelf API only
+        when no Calibre library is configured.
         """
-        now = time.monotonic()
+        if self._calibre_library is not None:
+            return self._calibre_library.get_library_books()
 
-        # Return cached data if still fresh
+        # --- Legacy Bookshelf API path ---
+        now = time.monotonic()
         if self._library_cache and (now - self._library_cache[1]) < _LIBRARY_CACHE_TTL:
             logger.debug("[library] using cached data (%d books)", len(self._library_cache[0]))
             return self._library_cache[0]
@@ -350,8 +356,6 @@ class BookshelfClient:
         except Exception as e:
             logger.warning("[library] fetch failed — using stale cache or empty: %s", e)
 
-        # Return stale cache if available, otherwise empty (search still works,
-        # just without library status annotations)
         return self._library_cache[0] if self._library_cache else []
 
     async def _search_open_library(self, query: str) -> list[dict]:

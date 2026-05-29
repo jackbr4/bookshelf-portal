@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 
 from .settings import settings
 from .bookshelf_client import BookshelfClient
+from .calibre_library import CalibreLibrary
 from .history import HistoryDB
 from .prowlarr_client import ProwlarrClient
 from .download_client import DownloadClient
@@ -44,11 +45,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+calibre_library = CalibreLibrary(library_path=settings.calibre_library_path)
+
 bookshelf = BookshelfClient(
     base_url=settings.bookshelf_base_url,
     api_key=settings.bookshelf_api_key,
     mock_mode=settings.mock_mode,
     google_books_api_key=settings.google_books_api_key,
+    calibre_library=calibre_library,
 )
 
 history_db = HistoryDB(settings.history_db_path)
