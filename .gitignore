@@ -8,9 +8,10 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Environment files (contain secrets)
-backend/.env
+# Environment files (contain secrets) — never commit real credentials
 .env
+.env.*
+!.env.example
 
 # Node
 node_modules/
