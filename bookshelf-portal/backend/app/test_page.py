@@ -187,7 +187,11 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   let _accepted = [];
 
   /* ── Auth ── */
-  function handle401() { window.location.href = '/'; }
+  function handle401() {
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('result-box').innerHTML = '';
+    setStatus('<a href="/" style="color:#60a5fa">← Log in first</a>, then come back to this page.', 'err');
+  }
 
   /* ── Fetch releases ── */
   async function fetchReleases() {
