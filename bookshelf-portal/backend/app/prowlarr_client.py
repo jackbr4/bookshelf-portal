@@ -128,8 +128,9 @@ class ProwlarrClient:
         for item in raw:
             title = item.get("title", "")
             size = item.get("size", 0) or 0
+            indexer = item.get("indexer", "")
             formats = extract_formats(title)
-            result = filter_release(title, size, formats)
+            result = filter_release(title, size, formats, indexer)
 
             fmt = result.detected_format or best_format(formats)
             release = ReleaseResult(

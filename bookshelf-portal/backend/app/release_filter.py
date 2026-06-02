@@ -26,14 +26,18 @@ REJECTED_KEYWORDS = {
     "sample", "preview", "excerpt",
 }
 
-MIN_SIZE_BYTES = 512 * 1024        # 0.5 MB — below this is almost certainly junk
+MIN_SIZE_BYTES = 512 * 1024        # 0.5 MB — applied to newsgroup results only
 MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB — above this is likely an audiobook or bundle
+
+# Trusted trackers: skip minimum size check (curated, short books are valid)
+# Substring match so "MyAnonamouse (Prowlarr)", "MAM - Prowlarr", etc. all match.
+MAM_INDEXER_KEYS = {"myanon", "mam"}
 
 # Format score: higher wins
 FORMAT_SCORE = {"epub": 30, "pdf": 5}
 
-# Indexer score bonus
-INDEXER_SCORE = {"myanonymouse": 10, "myanonmouse": 10, "mam": 10}
+# Indexer score bonus — substring match against lowercased indexer name
+INDEXER_SCORE = {"myanon": 10, "mam": 10}
 
 # ---------------------------------------------------------------------------
 # Format extraction
@@ -96,11 +100,17 @@ def _has_rejected_keyword(title: str) -> Optional[str]:
     return None
 
 
-def filter_release(title: str, size_bytes: int, formats: set[str]) -> FilterResult:
+def _is_mam(indexer: str) -> bool:
+    lower = indexer.lower()
+    return any(k in lower for k in MAM_INDEXER_KEYS)
+
+
+def filter_release(title: str, size_bytes: int, formats: set[str], indexer: str = "") -> FilterResult:
     """Return a FilterResult indicating whether a release should be shown."""
 
-    # Reject if size is clearly wrong
-    if size_bytes < MIN_SIZE_BYTES:
+    # Minimum size only applies to newsgroup sources; MAM is curated so small
+    # files are legitimate (e.g. short novels like The Old Man and the Sea).
+    if not _is_mam(indexer) and size_bytes < MIN_SIZE_BYTES:
         return FilterResult(accepted=False, reason=f"too small ({size_bytes // 1024}KB)")
     if size_bytes > MAX_SIZE_BYTES:
         return FilterResult(accepted=False, reason=f"too large ({size_bytes // 1024 // 1024}MB)")
