@@ -53,6 +53,21 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
     header a  { font-size: 0.8rem; color: var(--muted); text-decoration: none; transition: color 0.12s; }
     header a:hover { color: var(--text); }
+    .header-nav { display: flex; align-items: center; gap: 1rem; }
+    .btn-admin {
+      padding: 0.35rem 0.85rem;
+      background: var(--page-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--text-sec);
+      text-decoration: none;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+    .btn-admin:hover { background: var(--border); color: var(--text); border-color: #CBD5E1; }
 
     main { padding: 2rem 1.75rem; max-width: 780px; margin: 0 auto; }
 
@@ -381,7 +396,10 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
 <header>
   <h1>Direct Book Request</h1>
-  <a href="/">← back to portal</a>
+  <div class="header-nav">
+    <a href="/portal/admin" class="btn-admin">History</a>
+    <a href="/">← back to portal</a>
+  </div>
 </header>
 
 <main>

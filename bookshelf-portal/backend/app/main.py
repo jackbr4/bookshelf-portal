@@ -17,6 +17,7 @@ from .settings import settings
 from .bookshelf_client import BookshelfClient
 from .calibre_library import CalibreLibrary
 from .test_page import TEST_PAGE_HTML
+from .admin_page import ADMIN_PAGE_HTML
 from .history import HistoryDB
 from .prowlarr_client import ProwlarrClient
 from .download_client import DownloadClient
@@ -190,14 +191,19 @@ async def get_releases(request: Request, session=Depends(get_session), title: st
 
 
 @app.get("/portal/history", response_model=HistoryResponse)
-async def get_history(session=Depends(get_session)):
-    items = history_db.get_recent(limit=50)
+async def get_history(session=Depends(get_session), limit: int = 500):
+    items = history_db.get_recent(limit=min(limit, 1000))
     return HistoryResponse(items=[HistoryItem(**i) for i in items])
 
 
 @app.get("/portal/test", response_class=HTMLResponse, include_in_schema=False)
 async def test_page():
     return HTMLResponse(content=TEST_PAGE_HTML)
+
+
+@app.get("/portal/admin", response_class=HTMLResponse, include_in_schema=False)
+async def admin_page(session=Depends(get_session)):
+    return HTMLResponse(content=ADMIN_PAGE_HTML)
 
 
 @app.get("/health")
