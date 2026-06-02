@@ -503,7 +503,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
         html += '<span class="badge ' + badgeCls + '">' + esc(fmt || '?') + '</span>';
         html += '<div class="card-body">';
         html += '<span class="card-title">' + esc(r.title) + '</span>';
-        html += '<span class="score-pill">' + r.score + '</span>';
+        if (_view === 'advanced') html += '<span class="score-pill">' + r.score + '</span>';
         html += '<button class="btn-dl" onclick="dispatch(' + i + ')">Download</button>';
         html += '</div></div>';
 
