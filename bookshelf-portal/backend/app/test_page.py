@@ -5,21 +5,33 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Direct Book Request</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;500italic;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --page-bg:   #F8F9FA;
-      --surface:   #FFFFFF;
-      --border:    #DEE2E6;
-      --text:      #212529;
-      --muted:     #6C757D;
-      --primary:   #0D6EFD;
-      --success:   #198754;
-      --danger:    #DC3545;
-      --radius-sm: 6px;
-      --radius-md: 8px;
+      --page-bg:      #F4F6F8;
+      --surface:      #FFFFFF;
+      --border:       #E2E8F0;
+      --border-hover: #CBD5E1;
+      --text:         #1A202C;
+      --text-sec:     #4A5568;
+      --muted:        #718096;
+      --primary:      #0D6EFD;
+      --primary-bg:   #EBF4FF;
+      --success:      #198754;
+      --success-bg:   #D1E7DD;
+      --success-text: #0A3622;
+      --warning-bg:   #FFF3CD;
+      --warning-text: #664D03;
+      --danger:       #DC3545;
+      --danger-bg:    #F8D7DA;
+      --danger-text:  #58151C;
+      --radius-sm:    6px;
+      --radius-md:    10px;
+      --radius-lg:    14px;
+      --shadow-sm:    0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md:    0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
     }
 
     body {
@@ -33,53 +45,68 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 0.75rem 1.5rem;
+      padding: 0.875rem 1.75rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
-    header h1 { font-size: 1.05rem; font-weight: 600; }
-    header a  { font-size: 0.8rem; color: var(--muted); text-decoration: none; }
+    header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+    header a  { font-size: 0.8rem; color: var(--muted); text-decoration: none; transition: color 0.12s; }
     header a:hover { color: var(--text); }
 
-    main { padding: 2rem 1.5rem; max-width: 820px; margin: 0 auto; }
+    main { padding: 2rem 1.75rem; max-width: 780px; margin: 0 auto; }
 
-    /* ── Search row ── */
+    /* ── Search card ── */
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 1.75rem;
+    }
+    .search-card h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
     .search-row {
       display: flex;
       gap: 0.75rem;
       flex-wrap: wrap;
       align-items: flex-end;
-      margin-bottom: 1.25rem;
     }
-    .field { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 160px; }
+    .field { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 150px; }
     label {
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
+      color: var(--text-sec);
+      letter-spacing: 0.02em;
     }
     input[type="text"] {
-      background: var(--surface);
+      background: var(--page-bg);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 0.5rem 0.75rem;
+      padding: 0.55rem 0.875rem;
       border-radius: var(--radius-sm);
       font-size: 0.9rem;
       font-family: inherit;
       outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
       width: 100%;
     }
     input[type="text"]:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
+      background: var(--surface);
+      box-shadow: 0 0 0 3px rgba(13,110,253,0.12);
     }
 
     /* ── Buttons ── */
     .btn-search {
-      padding: 0.5rem 1.2rem;
+      padding: 0.55rem 1.4rem;
       background: var(--primary);
       color: #fff;
       border: none;
@@ -88,49 +115,58 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
+      transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
       white-space: nowrap;
+      letter-spacing: -0.01em;
     }
-    .btn-search:hover:not(:disabled) { background: #0b5ed7; }
+    .btn-search:hover:not(:disabled) {
+      background: #0b5ed7;
+      box-shadow: 0 2px 8px rgba(13,110,253,0.3);
+    }
     .btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .btn-dl {
-      padding: 0.3rem 0.75rem;
+      padding: 0.38rem 0.9rem;
       background: var(--success);
       color: #fff;
       border: none;
       border-radius: var(--radius-sm);
-      font-size: 0.77rem;
+      font-size: 0.78rem;
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
+      transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
       white-space: nowrap;
+      flex-shrink: 0;
     }
-    .btn-dl:hover:not(:disabled) { background: #157347; }
+    .btn-dl:hover:not(:disabled) {
+      background: #157347;
+      box-shadow: 0 2px 6px rgba(25,135,84,0.3);
+    }
     .btn-dl:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Toolbar (status + view toggle) ── */
+    /* ── Toolbar ── */
     .toolbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 0.75rem;
-      min-height: 1.6rem;
+      margin-bottom: 0.875rem;
+      min-height: 1.75rem;
     }
     #status { font-size: 0.82rem; color: var(--muted); }
     #status .err { color: var(--danger); }
     #status .ok  { color: var(--success); }
+    #status strong { color: var(--text-sec); font-weight: 600; }
 
     .view-toggle {
       display: flex;
       gap: 2px;
-      background: #E9ECEF;
+      background: var(--border);
       border-radius: var(--radius-sm);
       padding: 3px;
     }
     .view-toggle button {
-      padding: 0.28rem 0.75rem;
+      padding: 0.28rem 0.8rem;
       border: none;
       background: none;
       border-radius: 4px;
@@ -147,103 +183,198 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
 
-    /* ── Badges ── */
+    /* ── Format badges ── */
     .badge {
-      display: inline-block;
-      padding: 0.15rem 0.42rem;
-      border-radius: 4px;
-      font-size: 0.67rem;
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.5rem;
+      border-radius: 5px;
+      font-size: 0.65rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+      line-height: 1;
     }
-    .badge-epub { background: #D1E7DD; color: #0F5132; }
-    .badge-pdf  { background: #FFF3CD; color: #664D03; }
-    .badge-unk  { background: #E9ECEF; color: #6C757D; }
-    .badge-rej  { background: #F8D7DA; color: #842029; }
+    .badge-epub { background: var(--success-bg); color: var(--success-text); }
+    .badge-pdf  { background: var(--warning-bg); color: var(--warning-text); }
+    .badge-unk  { background: #E2E8F0; color: #4A5568; }
+    .badge-rej  { background: var(--danger-bg); color: var(--danger-text); }
 
-    /* ── Basic view: cards ── */
-    .card-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    /* ── Release cards ── */
+    .card-list { display: flex; flex-direction: column; gap: 0.625rem; }
+
     .release-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 0.75rem 1rem;
+      padding: 1rem 1.125rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+    .release-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+    }
+    .release-card.fmt-epub::before { background: var(--success); }
+    .release-card.fmt-pdf::before  { background: #B45309; }
+    .release-card.fmt-unk::before  { background: #CBD5E1; }
+
+    .release-card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+    }
+
+    .card-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .card-body {
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      transition: box-shadow 0.15s;
+      flex-wrap: wrap;
     }
-    .release-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .card-title {
       flex: 1;
+      min-width: 0;
       font-size: 0.875rem;
       font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      color: var(--text);
+      line-height: 1.45;
+      word-break: break-word;
     }
-    .card-score { font-size: 0.75rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
 
-    /* ── Advanced view: table ── */
-    .table-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      overflow-x: auto;
+    /* Score pill */
+    .score-pill {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--primary);
+      background: var(--primary-bg);
+      border-radius: 20px;
+      padding: 0.15rem 0.55rem;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    th {
-      padding: 0.55rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
+
+    /* Advanced metadata row */
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      flex-wrap: wrap;
+      padding-left: calc(0.75rem + 0.5rem + 1px); /* align with title */
+    }
+    .meta-chip {
+      font-size: 0.7rem;
       color: var(--muted);
       background: var(--page-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.15rem 0.45rem;
+      white-space: nowrap;
     }
-    td { padding: 0.55rem 0.75rem; border-bottom: 1px solid #F1F3F5; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #FAFAFA; }
+    .meta-dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--border-hover);
+      flex-shrink: 0;
+    }
 
-    .t-title { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .t-num   { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-    .t-score { color: var(--primary); font-weight: 600; text-align: right; }
-
-    /* ── Rejected toggle ── */
+    /* ── Rejected section ── */
     .rej-toggle {
       margin-top: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
       background: none;
       border: none;
       color: var(--muted);
       cursor: pointer;
       font-size: 0.78rem;
       font-family: inherit;
-      padding: 0;
+      padding: 0.25rem 0;
+      transition: color 0.12s;
+    }
+    .rej-toggle:hover { color: var(--text-sec); }
+    .rej-toggle-arrow { transition: transform 0.2s; display: inline-block; }
+    .rej-body { margin-top: 0.625rem; display: none; }
+
+    .rej-list { display: flex; flex-direction: column; gap: 0.375rem; }
+    .rej-item {
       display: flex;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.625rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 0.875rem;
+      opacity: 0.75;
     }
-    .rej-toggle:hover { color: var(--text); }
-    .rej-body { margin-top: 0.5rem; display: none; }
+    .rej-title {
+      flex: 1;
+      font-size: 0.8rem;
+      color: var(--text-sec);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rej-reason {
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
 
-    /* ── Result box ── */
+    /* ── Empty / error states ── */
+    .empty-state {
+      text-align: center;
+      padding: 3.5rem 1rem;
+      color: var(--muted);
+    }
+    .empty-state .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.4;
+    }
+    .empty-state p { font-size: 0.875rem; }
+
+    /* ── Result/confirmation box ── */
     .result-box {
       margin-top: 1.25rem;
-      padding: 0.875rem 1rem;
+      padding: 1rem 1.25rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       font-size: 0.875rem;
-      line-height: 1.5;
+      line-height: 1.55;
+      box-shadow: var(--shadow-sm);
     }
-    .result-box .meta { color: var(--muted); margin-top: 0.2rem; font-size: 0.75rem; }
     .result-box .ok  { color: var(--success); font-weight: 600; }
     .result-box .err { color: var(--danger);  font-weight: 600; }
+    .result-box .meta { color: var(--muted); margin-top: 0.25rem; font-size: 0.75rem; }
 
-    .no-results { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.875rem; }
+    /* ── Section heading ── */
+    .section-heading {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 0.625rem;
+    }
   </style>
 </head>
 <body>
@@ -254,23 +385,26 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 </header>
 
 <main>
-  <div class="search-row">
-    <div class="field">
-      <label>Title <span style="color:#adb5bd;font-weight:400">(optional)</span></label>
-      <input type="text" id="inp-title" placeholder="e.g. Dune" autocomplete="off" />
+  <div class="search-card">
+    <h2>Search releases</h2>
+    <div class="search-row">
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="inp-title" placeholder="e.g. A Children's Bible" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Author</label>
+        <input type="text" id="inp-author" placeholder="e.g. Lydia Millet" autocomplete="off" />
+      </div>
+      <button class="btn-search" id="btn-search" onclick="fetchReleases()">Search</button>
     </div>
-    <div class="field">
-      <label>Author <span style="color:#adb5bd;font-weight:400">(optional)</span></label>
-      <input type="text" id="inp-author" placeholder="e.g. Frank Herbert" autocomplete="off" />
-    </div>
-    <button class="btn-search" id="btn-search" onclick="fetchReleases()">Search</button>
   </div>
 
   <div class="toolbar">
     <div id="status"></div>
     <div class="view-toggle" id="view-toggle" style="display:none">
-      <button id="btn-basic" class="active" onclick="setView('basic')">Basic</button>
-      <button id="btn-advanced" onclick="setView('advanced')">Advanced</button>
+      <button id="btn-basic" class="active" onclick="setView('basic')">Simple</button>
+      <button id="btn-advanced" onclick="setView('advanced')">Detailed</button>
     </div>
   </div>
 
@@ -288,7 +422,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('results').innerHTML = '';
     document.getElementById('result-box').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
-    setStatus('<a href="/" style="color:var(--primary)">← Log in first</a>, then come back to this page.', 'err');
+    setStatus('<a href="/" style="color:var(--primary)">← Log in first</a>, then return to this page.', 'err');
   }
 
   /* ── View toggle ── */
@@ -303,11 +437,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   async function fetchReleases() {
     const title  = document.getElementById('inp-title').value.trim();
     const author = document.getElementById('inp-author').value.trim();
-
-    if (!title && !author) {
-      setStatus('Enter a title or author to search.', 'err');
-      return;
-    }
+    if (!title && !author) { setStatus('Enter a title or author to search.', 'err'); return; }
 
     const btn = document.getElementById('btn-search');
     btn.disabled = true;
@@ -316,8 +446,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('results').innerHTML = '';
     document.getElementById('result-box').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
-    _accepted = [];
-    _rejected = [];
+    _accepted = []; _rejected = [];
 
     const qs = new URLSearchParams();
     if (title)  qs.set('title', title);
@@ -345,81 +474,76 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     if (!accepted.length && !rejected.length) {
       document.getElementById('view-toggle').style.display = 'none';
-      el.innerHTML = '<div class="no-results">No results from Prowlarr.</div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found on Prowlarr for this search.</p></div>';
       setStatus('');
       return;
     }
 
     const label = accepted.length
-      ? accepted.length + ' accepted release' + (accepted.length !== 1 ? 's' : '')
+      ? '<strong>' + accepted.length + '</strong> release' + (accepted.length !== 1 ? 's' : '') + ' found'
       : 'No accepted releases';
-    setStatus(label + (rejected.length ? ' &nbsp;\xb7&nbsp; ' + rejected.length + ' rejected' : ''));
+    setStatus(label + (rejected.length ? ' &nbsp;&middot;&nbsp; ' + rejected.length + ' filtered out' : ''));
 
     document.getElementById('view-toggle').style.display = accepted.length ? 'flex' : 'none';
 
     let html = '';
 
     if (!accepted.length) {
-      html += '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem">No accepted releases (epub / pdf).</p>';
-    } else if (_view === 'basic') {
+      html += '<div class="empty-state"><div class="empty-icon">🔍</div><p>No epub or pdf releases found — ' + rejected.length + ' were filtered out.</p></div>';
+    } else {
+      html += '<div class="section-heading">' + accepted.length + ' accepted release' + (accepted.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="card-list">';
       accepted.forEach((r, i) => {
         const fmt = (r.detected_format || '').toLowerCase();
+        const fmtClass = fmt === 'epub' ? 'fmt-epub' : fmt === 'pdf' ? 'fmt-pdf' : 'fmt-unk';
         const badgeCls = fmt === 'epub' ? 'badge-epub' : fmt === 'pdf' ? 'badge-pdf' : 'badge-unk';
-        html += '<div class="release-card">' +
-          '<span class="badge ' + badgeCls + '">' + esc(fmt || '?') + '</span>' +
-          '<span class="card-title" title="' + esc(r.title) + '">' + esc(r.title) + '</span>' +
-          '<span class="card-score">score ' + r.score + '</span>' +
-          '<button class="btn-dl" onclick="dispatch(' + i + ')">Download</button>' +
-          '</div>';
+
+        html += '<div class="release-card ' + fmtClass + '">';
+        html += '<div class="card-main">';
+        html += '<span class="badge ' + badgeCls + '">' + esc(fmt || '?') + '</span>';
+        html += '<div class="card-body">';
+        html += '<span class="card-title">' + esc(r.title) + '</span>';
+        html += '<span class="score-pill">' + r.score + '</span>';
+        html += '<button class="btn-dl" onclick="dispatch(' + i + ')">Download</button>';
+        html += '</div></div>';
+
+        if (_view === 'advanced') {
+          const chips = [];
+          if (r.indexer)   chips.push(esc(r.indexer));
+          if (r.size_mb != null) chips.push(r.size_mb.toFixed(1) + ' MB');
+          if (r.seeders != null) chips.push(r.seeders + ' seeds');
+          if (r.age_days != null) chips.push(r.age_days + 'd old');
+
+          if (chips.length) {
+            html += '<div class="card-meta">';
+            chips.forEach((c, ci) => {
+              if (ci > 0) html += '<span class="meta-dot"></span>';
+              html += '<span class="meta-chip">' + c + '</span>';
+            });
+            html += '</div>';
+          }
+        }
+
+        html += '</div>';
       });
       html += '</div>';
-    } else {
-      html += '<div class="table-wrap"><table><thead><tr>' +
-        '<th>Format</th><th>Title</th><th>Indexer</th>' +
-        '<th style="text-align:right">Size</th>' +
-        '<th style="text-align:right">Seeds</th>' +
-        '<th style="text-align:right">Age</th>' +
-        '<th style="text-align:right">Score</th>' +
-        '<th></th></tr></thead><tbody>';
-
-      accepted.forEach((r, i) => {
-        const fmt = (r.detected_format || '').toLowerCase();
-        const badgeCls = fmt === 'epub' ? 'badge-epub' : fmt === 'pdf' ? 'badge-pdf' : 'badge-unk';
-        html += '<tr>' +
-          '<td><span class="badge ' + badgeCls + '">' + esc(fmt || '?') + '</span></td>' +
-          '<td class="t-title" title="' + esc(r.title) + '">' + esc(r.title) + '</td>' +
-          '<td style="color:var(--muted)">' + esc(r.indexer) + '</td>' +
-          '<td class="t-num">' + (r.size_mb != null ? r.size_mb.toFixed(1) + ' MB' : '—') + '</td>' +
-          '<td class="t-num">' + (r.seeders != null ? r.seeders : '—') + '</td>' +
-          '<td class="t-num">' + (r.age_days != null ? r.age_days + 'd' : '—') + '</td>' +
-          '<td class="t-score">' + r.score + '</td>' +
-          '<td><button class="btn-dl" onclick="dispatch(' + i + ')">Download</button></td>' +
-          '</tr>';
-      });
-
-      html += '</tbody></table></div>';
     }
 
-    /* rejected */
+    /* ── Rejected section ── */
     if (rejected.length) {
-      html += '<button class="rej-toggle" id="rej-btn" onclick="toggleRejected()">' +
-        '<span id="rej-arrow">▶</span> ' + rejected.length + ' rejected</button>' +
-        '<div class="rej-body" id="rej-body">' +
-        '<div class="table-wrap"><table><thead><tr>' +
-        '<th>Format</th><th>Title</th><th>Reason</th>' +
-        '</tr></thead><tbody>';
-
+      html += '<button class="rej-toggle" id="rej-btn" onclick="toggleRejected()">'
+            + '<span class="rej-toggle-arrow" id="rej-arrow">▶</span>'
+            + ' ' + rejected.length + ' filtered out</button>';
+      html += '<div class="rej-body" id="rej-body"><div class="rej-list">';
       rejected.forEach(r => {
         const fmt = (r.detected_format || '').toLowerCase();
-        html += '<tr>' +
-          '<td><span class="badge badge-rej">' + esc(fmt || '?') + '</span></td>' +
-          '<td class="t-title" title="' + esc(r.title) + '">' + esc(r.title) + '</td>' +
-          '<td style="color:var(--muted)">' + esc(r.reject_reason || '') + '</td>' +
-          '</tr>';
+        html += '<div class="rej-item">'
+              + '<span class="badge badge-rej">' + esc(fmt || '?') + '</span>'
+              + '<span class="rej-title" title="' + esc(r.title) + '">' + esc(r.title) + '</span>'
+              + '<span class="rej-reason">' + esc(r.reject_reason || '') + '</span>'
+              + '</div>';
       });
-
-      html += '</tbody></table></div></div>';
+      html += '</div></div>';
     }
 
     el.innerHTML = html;
@@ -428,9 +552,9 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   function toggleRejected() {
     const body  = document.getElementById('rej-body');
     const arrow = document.getElementById('rej-arrow');
-    const open  = body.style.display !== 'none' && body.style.display !== '';
-    body.style.display = open ? 'none' : 'block';
-    arrow.textContent  = open ? '▶' : '▼';
+    const open  = body.style.display === 'block';
+    body.style.display    = open ? 'none' : 'block';
+    arrow.style.transform = open ? '' : 'rotate(90deg)';
   }
 
   /* ── Dispatch ── */
@@ -461,17 +585,16 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       if (resp.status === 401) { handle401(); return; }
       const data = await resp.json();
       if (data.ok) {
-        box.innerHTML =
-          '<div class="result-box">' +
-          '<span class="ok">✓ ' + esc(data.message) + '</span>' +
-          '<div class="meta">Download ID: ' + esc(data.download_id) + '</div>' +
-          '<div class="meta">Record: ' + esc(data.record_id) + '</div>' +
-          '</div>';
+        box.innerHTML = '<div class="result-box">'
+          + '<span class="ok">&#10003; ' + esc(data.message) + '</span>'
+          + '<div class="meta">Download ID: ' + esc(data.download_id) + '</div>'
+          + '<div class="meta">Record: ' + esc(data.record_id) + '</div>'
+          + '</div>';
       } else {
         throw new Error(data.detail || JSON.stringify(data));
       }
     } catch (e) {
-      box.innerHTML = '<div class="result-box"><span class="err">✗ ' + esc(e.message) + '</span></div>';
+      box.innerHTML = '<div class="result-box"><span class="err">&#10007; ' + esc(e.message) + '</span></div>';
       document.querySelectorAll('.btn-dl').forEach(b => b.disabled = false);
     }
   }
@@ -484,10 +607,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
   function esc(s) {
     return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   document.addEventListener('keydown', e => {
