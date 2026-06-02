@@ -263,7 +263,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     </div>
     <div class="stat-card green">
       <div class="stat-value" id="stat-imported">—</div>
-      <div class="stat-label">In Calibre</div>
+      <div class="stat-label">In Library</div>
     </div>
     <div class="stat-card blue">
       <div class="stat-value" id="stat-active">—</div>
