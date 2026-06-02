@@ -16,6 +16,7 @@ from typing import Optional
 ACCEPTED_FORMATS = {"epub", "pdf"}
 
 REJECTED_FORMATS = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4", "mobi", "azw3"}
+AUDIO_FORMATS    = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4"}
 
 REJECTED_KEYWORDS = {
     "audiobook", "audio book", "abridged", "unabridged",
@@ -104,25 +105,30 @@ def filter_release(title: str, size_bytes: int, formats: set[str]) -> FilterResu
     if size_bytes > MAX_SIZE_BYTES:
         return FilterResult(accepted=False, reason=f"too large ({size_bytes // 1024 // 1024}MB)")
 
-    # Reject if any detected format is audio
-    if formats & REJECTED_FORMATS:
-        bad = (formats & REJECTED_FORMATS).pop()
-        return FilterResult(accepted=False, reason=f"audio format ({bad})")
-
-    # Reject on title keywords
+    # Reject on title keywords regardless of format
     kw = _has_rejected_keyword(title)
     if kw:
         return FilterResult(accepted=False, reason=f"rejected keyword ({kw!r})")
 
-    # Must have at least one accepted format (or no format detected at all —
-    # give unknown formats a chance rather than silently dropping them)
+    # Accept if an accepted format is present — a title like "[AZW3 EPUB]" has
+    # epub and should be accepted even though azw3 is also listed.
     fmt = best_format(formats)
-    if not fmt and formats:
-        # Formats were detected but none are accepted
+    if fmt:
+        return FilterResult(accepted=True, detected_format=fmt)
+
+    # No accepted format — reject with a precise reason
+    bad_formats = formats & REJECTED_FORMATS
+    if bad_formats:
+        bad = bad_formats.pop()
+        reason = "audio format" if bad in AUDIO_FORMATS else "ebook format not supported"
+        return FilterResult(accepted=False, reason=f"{reason} ({bad})")
+
+    if formats:
         detected = ", ".join(sorted(formats))
         return FilterResult(accepted=False, reason=f"unsupported format ({detected})")
 
-    return FilterResult(accepted=True, detected_format=fmt)
+    # No format detected at all — give it a chance
+    return FilterResult(accepted=True, detected_format=None)
 
 
 # ---------------------------------------------------------------------------
