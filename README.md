@@ -1,6 +1,6 @@
 # Bookshelf Portal
 
-A self-hosted, password-protected web portal that lets family members search for books and request them to be added to your [Bookshelf](https://github.com/advplyr/bookshelf) (Readarr-compatible) instance. Results are pulled from Bookshelf's own lookup API, enriched by Google Books and Open Library, and annotated with your current library status in real time.
+A self-hosted, password-protected web portal that lets users search for books and request them to be added to your [Bookshelf](https://github.com/advplyr/bookshelf) (Readarr-compatible) instance. Results are pulled from Bookshelf's own lookup API, enriched by Google Books and Open Library, and annotated with your current library status in real time.
 
 ---
 
