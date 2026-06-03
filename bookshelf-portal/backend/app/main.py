@@ -65,12 +65,19 @@ prowlarr = ProwlarrClient(
 )
 
 download_client = DownloadClient(
+    torrent_client=settings.torrent_client,
     rtorrent_url=settings.rtorrent_url,
     rtorrent_user=settings.rtorrent_user,
     rtorrent_password=settings.rtorrent_password,
     rtorrent_download_dir=settings.rtorrent_download_dir,
     rtorrent_category=settings.rtorrent_category,
     rtorrent_imported_category=settings.rtorrent_imported_category,
+    qbittorrent_url=settings.qbittorrent_url,
+    qbittorrent_user=settings.qbittorrent_user,
+    qbittorrent_password=settings.qbittorrent_password,
+    qbittorrent_download_dir=settings.qbittorrent_download_dir,
+    qbittorrent_category=settings.qbittorrent_category,
+    qbittorrent_imported_category=settings.qbittorrent_imported_category,
     sabnzbd_base_url=settings.sabnzbd_base_url,
     sabnzbd_api_key=settings.sabnzbd_api_key,
     sabnzbd_category=settings.sabnzbd_category,

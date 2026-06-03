@@ -133,6 +133,97 @@ def rt_set_category(info_hash: str, category: str):
 
 
 # ---------------------------------------------------------------------------
+# qBittorrent (sync HTTP + cookie auth)
+# ---------------------------------------------------------------------------
+
+# Torrent states that mean the download is fully complete.
+_QBT_COMPLETE_STATES = {
+    "uploading", "stalledUP", "forcedUP", "pausedUP",
+    "checkingUP", "queuedUP", "missingFiles",
+}
+
+
+class _QbtSession:
+    """Thin sync wrapper around the qBittorrent Web API."""
+
+    def __init__(self):
+        import http.cookiejar
+        import urllib.request as _req
+        self._opener = _req.build_opener(_req.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self._base = settings.qbittorrent_url.rstrip("/")
+        self._logged_in = False
+
+    def _post(self, path: str, data: dict) -> str:
+        body = urllib.parse.urlencode(data).encode()
+        req = Request(
+            f"{self._base}{path}",
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with self._opener.open(req, timeout=15) as resp:
+            return resp.read().decode()
+
+    def _get(self, path: str, params: dict | None = None) -> str:
+        url = f"{self._base}{path}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        req = Request(url)
+        with self._opener.open(req, timeout=15) as resp:
+            return resp.read().decode()
+
+    def login(self):
+        result = self._post("/api/v2/auth/login", {
+            "username": settings.qbittorrent_user,
+            "password": settings.qbittorrent_password,
+        })
+        if result.strip() != "Ok.":
+            raise RuntimeError(f"qBittorrent login failed: {result!r}")
+        self._logged_in = True
+
+    def torrent_info(self, info_hash: str) -> Optional[dict]:
+        raw = self._get("/api/v2/torrents/info", {"hashes": info_hash})
+        items = json.loads(raw)
+        return items[0] if items else None
+
+    def set_category(self, info_hash: str, category: str):
+        self._post("/api/v2/torrents/setCategory", {
+            "hashes": info_hash,
+            "category": category,
+        })
+
+
+def qbt_is_complete(info_hash: str, session: "_QbtSession") -> bool:
+    try:
+        info = session.torrent_info(info_hash)
+        if info is None:
+            logger.warning("[qbittorrent] torrent %s not found", info_hash[:12])
+            return False
+        return info.get("state", "") in _QBT_COMPLETE_STATES
+    except Exception as exc:
+        logger.warning("[qbittorrent] state check failed for %s: %s", info_hash[:12], exc)
+        return False
+
+
+def qbt_content_path(info_hash: str, session: "_QbtSession") -> Optional[str]:
+    try:
+        info = session.torrent_info(info_hash)
+        if info is None:
+            return None
+        return info.get("content_path") or info.get("save_path")
+    except Exception as exc:
+        logger.warning("[qbittorrent] content_path failed for %s: %s", info_hash[:12], exc)
+        return None
+
+
+def qbt_set_category(info_hash: str, category: str, session: "_QbtSession"):
+    try:
+        session.set_category(info_hash, category)
+        logger.info("[qbittorrent] relabelled %s → %s", info_hash[:12], category)
+    except Exception as exc:
+        logger.warning("[qbittorrent] relabel failed for %s: %s", info_hash[:12], exc)
+
+
+# ---------------------------------------------------------------------------
 # SABnzbd (sync HTTP)
 # ---------------------------------------------------------------------------
 
@@ -189,7 +280,7 @@ def find_book_file(base_path: str) -> Optional[Path]:
 # Main loop
 # ---------------------------------------------------------------------------
 
-def process_record(record: dict, db: HistoryDB, calibre: CalibreClient):
+def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Optional["_QbtSession"] = None):
     record_id = record["id"]
     download_id = record["download_id"]
     protocol = record["protocol"]
@@ -197,11 +288,17 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient):
     author = record["author"]
 
     if protocol == "torrent":
-        if not rt_is_complete(download_id):
-            logger.debug("[watcher] %r still downloading (torrent)", title)
-            return
+        if settings.torrent_client == "qbittorrent":
+            if qbt is None or not qbt_is_complete(download_id, qbt):
+                logger.debug("[watcher] %r still downloading (qbittorrent)", title)
+                return
+            base_path = qbt_content_path(download_id, qbt)
+        else:
+            if not rt_is_complete(download_id):
+                logger.debug("[watcher] %r still downloading (torrent)", title)
+                return
+            base_path = rt_base_path(download_id)
 
-        base_path = rt_base_path(download_id)
         if not base_path:
             logger.warning("[watcher] no base_path for %r — skipping", title)
             return
@@ -250,9 +347,12 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient):
     db.create_import(record_id, str(book_file), "imported", calibre_id=calibre_id)
     db.update_download_status(record_id, "imported")
 
-    # Relabel torrent so it leaves the active readarr queue
+    # Relabel torrent so it leaves the active download queue
     if protocol == "torrent":
-        rt_set_category(download_id, settings.rtorrent_imported_category)
+        if settings.torrent_client == "qbittorrent" and qbt:
+            qbt_set_category(download_id, settings.qbittorrent_imported_category, qbt)
+        else:
+            rt_set_category(download_id, settings.rtorrent_imported_category)
 
     logger.info(
         "[watcher] imported %r by %s → calibre_id=%d", title, author, calibre_id
@@ -271,10 +371,20 @@ def main():
         logger.debug("[watcher] no pending downloads")
         return
 
+    # Login to qBittorrent once per run if it's the active torrent client
+    qbt: Optional[_QbtSession] = None
+    if settings.torrent_client == "qbittorrent" and any(r["protocol"] == "torrent" for r in pending):
+        try:
+            qbt = _QbtSession()
+            qbt.login()
+        except Exception as exc:
+            logger.warning("[watcher] qBittorrent login failed: %s", exc)
+            qbt = None
+
     logger.info("[watcher] checking %d pending download(s)", len(pending))
     for record in pending:
         try:
-            process_record(record, db, calibre)
+            process_record(record, db, calibre, qbt=qbt)
         except Exception as exc:
             logger.exception(
                 "[watcher] unexpected error processing %r: %s",
