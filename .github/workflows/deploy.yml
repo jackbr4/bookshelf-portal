@@ -23,7 +23,11 @@ jobs:
             git reset --hard origin/main
 
             echo "Building container..."
-            podman build -t bookshelf-request-portal ./bookshelf-portal
+            COMMIT=$(git rev-parse HEAD)
+            podman build \
+              --build-arg CACHE_BUST="$COMMIT" \
+              -t bookshelf-request-portal \
+              ./bookshelf-portal
 
             echo "Stopping old container..."
             podman update --restart=no bookshelf-request-portal || true
@@ -44,5 +48,5 @@ jobs:
               bookshelf-request-portal
 
             echo "Verifying..."
-            sleep 10
-            curl -sf http://127.0.0.1:8788/health && echo "Health check passed"
+            until curl -sf http://127.0.0.1:8788/health; do sleep 2; done
+            echo "Health check passed"
