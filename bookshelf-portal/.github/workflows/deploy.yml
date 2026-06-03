@@ -1,0 +1,48 @@
+name: Deploy to Seedbox
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: narvi.whatbox.ca
+          username: jackbr4
+          key: ${{ secrets.SEEDBOX_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/apps/bookshelf-portal
+
+            echo "Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "Building container..."
+            podman build -t bookshelf-request-portal ./bookshelf-portal
+
+            echo "Stopping old container..."
+            podman update --restart=no bookshelf-request-portal || true
+            OLD_PID=$(podman inspect bookshelf-request-portal --format '{{.State.Pid}}' 2>/dev/null || echo "")
+            if [ -n "$OLD_PID" ] && [ "$OLD_PID" != "0" ]; then
+              kill -9 $OLD_PID || true
+              sleep 2
+            fi
+            podman rm -f bookshelf-request-portal || true
+
+            echo "Starting new container..."
+            podman run -d --name bookshelf-request-portal \
+              --restart=always \
+              --network=host \
+              --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env \
+              -v /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro \
+              -v /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db \
+              bookshelf-request-portal
+
+            echo "Verifying..."
+            sleep 10
+            curl -sf http://127.0.0.1:8788/health && echo "Health check passed"
