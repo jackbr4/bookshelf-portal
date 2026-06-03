@@ -94,7 +94,13 @@ class ProwlarrClient:
                 logger.info("[prowlarr] searching: %r", query)
                 resp = await self._client.get(
                     "/api/v1/search",
-                    params={"query": query, "type": "search"},
+                    params=[
+                        ("query", query),
+                        ("type", "search"),
+                        ("limit", 100),
+                        ("categories", 7020),
+                        ("categories", 107020),
+                    ],
                 )
                 if not resp.is_success:
                     logger.warning("[prowlarr] search returned %s for %r", resp.status_code, query)
