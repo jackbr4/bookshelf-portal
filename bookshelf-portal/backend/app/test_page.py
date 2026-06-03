@@ -394,6 +394,103 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     }
     .toast-close:hover { opacity: 1; }
 
+    /* ── Login screen ── */
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--page-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 1.5rem;
+    }
+    #login-screen.hidden { display: none; }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2rem 2rem 1.75rem;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: var(--shadow-md);
+    }
+    .login-card h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      letter-spacing: -0.01em;
+    }
+    .login-card p {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+    }
+    .login-card label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-sec);
+      letter-spacing: 0.02em;
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+    input[type="password"] {
+      background: var(--page-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.55rem 0.875rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      width: 100%;
+      margin-bottom: 0.875rem;
+    }
+    input[type="password"]:focus {
+      border-color: var(--primary);
+      background: var(--surface);
+      box-shadow: 0 0 0 3px rgba(13,110,253,0.12);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 0.6rem 1rem;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+    .btn-login:hover:not(:disabled) {
+      background: #0b5ed7;
+      box-shadow: 0 2px 8px rgba(13,110,253,0.3);
+    }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--danger);
+      text-align: center;
+      min-height: 1.2em;
+    }
+    .btn-signout {
+      padding: 0.35rem 0.85rem;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .btn-signout:hover { background: var(--border); color: var(--text); }
+
     /* ── Empty / error states ── */
     .empty-state {
       text-align: center;
@@ -420,11 +517,22 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 
+<div id="login-screen">
+  <div class="login-card">
+    <h2>Book Request Portal</h2>
+    <p>Enter the access code to continue.</p>
+    <label for="inp-password">Access code</label>
+    <input type="password" id="inp-password" placeholder="••••••••" autocomplete="current-password" />
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
 <header>
   <h1>Direct Book Request</h1>
   <div class="header-nav">
     <a href="/portal/admin" class="btn-admin">History</a>
-    <a href="/">← back to portal</a>
+    <button class="btn-signout" onclick="doSignOut()">Sign out</button>
   </div>
 </header>
 
@@ -467,11 +575,77 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   let _view = 'basic';
 
   /* ── Auth ── */
+  function showLoginScreen() {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('login-error').textContent = '';
+    const pw = document.getElementById('inp-password');
+    pw.value = '';
+    pw.focus();
+  }
+
+  function hideLoginScreen() {
+    document.getElementById('login-screen').classList.add('hidden');
+  }
+
   function handle401() {
     document.getElementById('results').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
-    setStatus('<a href="/" style="color:var(--primary)">← Log in first</a>, then return to this page.', 'err');
+    setStatus('');
+    showLoginScreen();
   }
+
+  async function doLogin() {
+    const pw  = document.getElementById('inp-password').value;
+    const btn = document.getElementById('btn-login');
+    const err = document.getElementById('login-error');
+    if (!pw) return;
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    err.textContent = '';
+    try {
+      const resp = await fetch('/portal/auth', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_code: pw }),
+      });
+      if (resp.ok) {
+        hideLoginScreen();
+      } else {
+        err.textContent = 'Incorrect access code.';
+        document.getElementById('inp-password').value = '';
+        document.getElementById('inp-password').focus();
+      }
+    } catch (e) {
+      err.textContent = 'Could not reach server. Try again.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  }
+
+  async function doSignOut() {
+    await fetch('/portal/logout', { method: 'POST', credentials: 'include' });
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('view-toggle').style.display = 'none';
+    setStatus('');
+    _accepted = []; _rejected = [];
+    showLoginScreen();
+  }
+
+  /* Check session on load — skip the login screen if already authenticated */
+  (async function checkSession() {
+    try {
+      const resp = await fetch('/portal/history?limit=1', { credentials: 'include' });
+      if (resp.ok) {
+        hideLoginScreen();
+      } else {
+        showLoginScreen();
+      }
+    } catch (e) {
+      showLoginScreen();
+    }
+  })();
 
   /* ── View toggle ── */
   function setView(v) {
@@ -675,11 +849,11 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' &&
-        (document.activeElement === document.getElementById('inp-title') ||
-         document.activeElement === document.getElementById('inp-author'))) {
-      fetchReleases();
-    }
+    if (e.key !== 'Enter') return;
+    const active = document.activeElement;
+    if (active === document.getElementById('inp-password')) { doLogin(); return; }
+    if (active === document.getElementById('inp-title') ||
+        active === document.getElementById('inp-author')) { fetchReleases(); }
   });
 </script>
 </body>
