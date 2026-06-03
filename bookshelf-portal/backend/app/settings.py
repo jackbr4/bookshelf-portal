@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     app_password: str = "family"
     app_session_secret: str = "changeme-secret"
     session_ttl_hours: float = 8.0
+    cookie_secure: bool = False
     mock_mode: bool = True
     port: int = 8788
     allowed_origins: List[str] = ["http://localhost:5173", "http://localhost:4173"]

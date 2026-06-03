@@ -97,7 +97,7 @@ async def auth(request: Request, response: Response, body: AuthRequest):
         key="session_token",
         value=token,
         httponly=True,
-        secure=not settings.mock_mode,
+        secure=settings.cookie_secure,
         samesite="lax",
         max_age=int(settings.session_ttl_hours * 3600),
     )
