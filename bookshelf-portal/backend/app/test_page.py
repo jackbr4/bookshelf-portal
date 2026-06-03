@@ -407,21 +407,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     }
     .empty-state p { font-size: 0.875rem; }
 
-    /* ── Result/confirmation box ── */
-    .result-box {
-      margin-top: 1.25rem;
-      padding: 1rem 1.25rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      font-size: 0.875rem;
-      line-height: 1.55;
-      box-shadow: var(--shadow-sm);
-    }
-    .result-box .ok  { color: var(--success); font-weight: 600; }
-    .result-box .err { color: var(--danger);  font-weight: 600; }
-    .result-box .meta { color: var(--muted); margin-top: 0.25rem; font-size: 0.75rem; }
-
     /* ── Section heading ── */
     .section-heading {
       font-size: 0.72rem;
@@ -484,7 +469,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   /* ── Auth ── */
   function handle401() {
     document.getElementById('results').innerHTML = '';
-    document.getElementById('result-box').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
     setStatus('<a href="/" style="color:var(--primary)">← Log in first</a>, then return to this page.', 'err');
   }
@@ -508,7 +492,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     btn.textContent = 'Searching…';
     setStatus('');
     document.getElementById('results').innerHTML = '';
-    document.getElementById('result-box').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
     _accepted = []; _rejected = [];
 
