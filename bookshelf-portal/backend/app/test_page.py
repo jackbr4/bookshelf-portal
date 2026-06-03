@@ -353,6 +353,47 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       white-space: nowrap;
     }
 
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 320px;
+      max-width: 560px;
+      width: max-content;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.875rem 1.125rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.07);
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      transform: translateX(-50%) translateY(8px);
+    }
+    #toast.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast.toast-success { border-left: 4px solid var(--success); }
+    #toast.toast-error   { border-left: 4px solid var(--danger); }
+    .toast-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+    .toast-icon.ok  { color: var(--success); }
+    .toast-icon.err { color: var(--danger); }
+    .toast-body { flex: 1; font-size: 0.85rem; line-height: 1.5; color: var(--text); }
+    .toast-close {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 1rem; padding: 0; line-height: 1;
+      flex-shrink: 0; opacity: 0.6;
+    }
+    .toast-close:hover { opacity: 1; }
+
     /* ── Empty / error states ── */
     .empty-state {
       text-align: center;
@@ -427,8 +468,13 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   </div>
 
   <div id="results"></div>
-  <div id="result-box"></div>
 </main>
+
+<div id="toast">
+  <span class="toast-icon" id="toast-icon"></span>
+  <span class="toast-body" id="toast-body"></span>
+  <button class="toast-close" onclick="hideToast()" aria-label="Dismiss">&times;</button>
+</div>
 
 <script>
   let _accepted = [];
@@ -522,7 +568,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
         html += '<div class="card-body">';
         html += '<span class="card-title">' + esc(r.title) + '</span>';
         if (_view === 'advanced') html += '<span class="score-pill">' + r.score + '</span>';
-        html += '<button class="btn-dl" onclick="dispatch(' + i + ')">Download</button>';
+        html += '<button class="btn-dl" onclick="dispatch(' + i + ', this)">Download</button>';
         html += '</div></div>';
 
         if (_view === 'advanced') {
@@ -575,16 +621,34 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     arrow.style.transform = open ? '' : 'rotate(90deg)';
   }
 
+  /* ── Toast ── */
+  let _toastTimer = null;
+  function showToast(msg, kind) {
+    const toast = document.getElementById('toast');
+    const icon  = document.getElementById('toast-icon');
+    const body  = document.getElementById('toast-body');
+    toast.className = 'toast-' + kind;
+    icon.className  = 'toast-icon ' + (kind === 'success' ? 'ok' : 'err');
+    icon.textContent = kind === 'success' ? '✓' : '✕';
+    body.textContent = msg;
+    toast.classList.add('visible');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(hideToast, 5000);
+  }
+  function hideToast() {
+    document.getElementById('toast').classList.remove('visible');
+    clearTimeout(_toastTimer);
+  }
+
   /* ── Dispatch ── */
-  async function dispatch(index) {
+  async function dispatch(index, btn) {
     const release = _accepted[index];
     const title   = document.getElementById('inp-title').value.trim();
     const author  = document.getElementById('inp-author').value.trim();
+    const displayTitle = title || release.title;
 
-    document.querySelectorAll('.btn-dl').forEach(b => b.disabled = true);
-
-    const box = document.getElementById('result-box');
-    box.innerHTML = '<div class="result-box">Dispatching <strong>' + esc(release.title) + '</strong>…</div>';
+    btn.disabled = true;
+    btn.textContent = '…';
 
     try {
       const resp = await fetch('/portal/download', {
@@ -592,7 +656,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title:         title || release.title,
+          title:         displayTitle,
           author:        author || '',
           release_title: release.title,
           indexer:       release.indexer,
@@ -603,17 +667,15 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       if (resp.status === 401) { handle401(); return; }
       const data = await resp.json();
       if (data.ok) {
-        box.innerHTML = '<div class="result-box">'
-          + '<span class="ok">&#10003; ' + esc(data.message) + '</span>'
-          + '<div class="meta">Download ID: ' + esc(data.download_id) + '</div>'
-          + '<div class="meta">Record: ' + esc(data.record_id) + '</div>'
-          + '</div>';
+        showToast(displayTitle + ' is being downloaded and should be available in the Calibre Library in a few minutes.', 'success');
       } else {
         throw new Error(data.detail || JSON.stringify(data));
       }
     } catch (e) {
-      box.innerHTML = '<div class="result-box"><span class="err">&#10007; ' + esc(e.message) + '</span></div>';
-      document.querySelectorAll('.btn-dl').forEach(b => b.disabled = false);
+      showToast('Download failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Download';
     }
   }
 
