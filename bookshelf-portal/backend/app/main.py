@@ -97,6 +97,7 @@ async def auth(request: Request, response: Response, body: AuthRequest):
         key="session_token",
         value=token,
         httponly=True,
+        secure=not settings.mock_mode,
         samesite="lax",
         max_age=int(settings.session_ttl_hours * 3600),
     )
@@ -153,7 +154,14 @@ async def add_series(body: AddSeriesRequest, request: Request, session=Depends(g
 
 
 @app.post("/portal/download", response_model=DownloadResponse)
+@limiter.limit("20/minute")
 async def dispatch_download(body: DownloadRequest, request: Request, session=Depends(get_session)):
+    if not body.download_url.startswith(settings.prowlarr_base_url):
+        logger.warning("Rejected download_url not from Prowlarr: %s", body.download_url[:80])
+        raise HTTPException(status_code=400, detail="Invalid download URL")
+    if body.protocol not in ("torrent", "usenet"):
+        raise HTTPException(status_code=400, detail="Invalid protocol")
+
     logger.info("Download dispatch: %r by %r via %s", body.title, body.author, body.protocol)
     try:
         download_id = await download_client.dispatch(
