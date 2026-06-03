@@ -237,11 +237,9 @@ def sab_is_complete(nzo_id: str) -> tuple[bool, Optional[str]]:
     base = settings.sabnzbd_base_url.rstrip("/")
     api_key = settings.sabnzbd_api_key
 
-    # Check history first (completed downloads)
-    url = (
-        f"{base}/api?apikey={api_key}&output=json"
-        f"&mode=history&limit=100&search={urllib.parse.quote(nzo_id)}"
-    )
+    # Check history — SABnzbd's `search` filters by name, not nzo_id, so fetch
+    # and filter in Python.
+    url = f"{base}/api?apikey={api_key}&output=json&mode=history&limit=200"
     try:
         with urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read())
