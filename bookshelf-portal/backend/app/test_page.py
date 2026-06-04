@@ -3,7 +3,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Direct Book Request</title>
+  <title>Book Request Portal</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>📚</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;500italic;600&display=swap" rel="stylesheet">
   <style>
@@ -410,21 +411,27 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 2rem 2rem 1.75rem;
+      padding: 2.5rem 2rem 2rem;
       width: 100%;
-      max-width: 360px;
-      box-shadow: var(--shadow-md);
+      max-width: 400px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+      text-align: center;
+    }
+    .login-card .login-icon {
+      font-size: 2.5rem;
+      display: block;
+      margin-bottom: 0.625rem;
     }
     .login-card h2 {
-      font-size: 1.05rem;
+      font-size: 1.25rem;
       font-weight: 600;
       margin-bottom: 0.25rem;
-      letter-spacing: -0.01em;
+      letter-spacing: -0.02em;
     }
     .login-card p {
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       color: var(--muted);
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.75rem;
     }
     .login-card label {
       font-size: 0.72rem;
@@ -432,6 +439,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       color: var(--text-sec);
       letter-spacing: 0.02em;
       display: block;
+      text-align: left;
       margin-bottom: 0.35rem;
     }
     input[type="password"] {
@@ -519,17 +527,18 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
 <div id="login-screen">
   <div class="login-card">
+    <span class="login-icon">📚</span>
     <h2>Book Request Portal</h2>
-    <p>Enter the access code to continue.</p>
+    <p>Enter the access code to continue</p>
     <label for="inp-password">Access code</label>
-    <input type="password" id="inp-password" placeholder="••••••••" autocomplete="current-password" />
-    <button class="btn-login" id="btn-login" onclick="doLogin()">Sign in</button>
+    <input type="password" id="inp-password" placeholder="Enter access code" autocomplete="current-password" />
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Continue</button>
     <div class="login-error" id="login-error"></div>
   </div>
 </div>
 
 <header>
-  <h1>Direct Book Request</h1>
+  <h1>Book Request Portal</h1>
   <div class="header-nav">
     <a href="/portal/admin" class="btn-admin">History</a>
     <button class="btn-signout" onclick="doSignOut()">Sign out</button>
@@ -538,7 +547,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
 <main>
   <div class="search-card">
-    <h2>Search releases</h2>
+    <h2>Search for Books</h2>
+    <p style="font-size:0.82rem; color:var(--muted); margin-bottom:1rem; margin-top:-0.5rem;">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
     <div class="search-row">
       <div class="field">
         <label>Title</label>
@@ -695,7 +705,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     if (!accepted.length && !rejected.length) {
       document.getElementById('view-toggle').style.display = 'none';
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found on Prowlarr for this search.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found for this search. Try a different title or author.</p></div>';
       setStatus('');
       return;
     }
@@ -710,7 +720,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     let html = '';
 
     if (!accepted.length) {
-      html += '<div class="empty-state"><div class="empty-icon">🔍</div><p>No epub or pdf releases found — ' + rejected.length + ' were filtered out.</p></div>';
+      html += '<div class="empty-state"><div class="empty-icon">🔍</div><p>No downloadable releases found — ' + rejected.length + ' were filtered out.</p></div>';
     } else {
       html += '<div class="section-heading">' + accepted.length + ' accepted release' + (accepted.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="card-list">';
