@@ -50,3 +50,10 @@ jobs:
             echo "Verifying..."
             until curl -sf http://127.0.0.1:8788/health; do sleep 2; done
             echo "Health check passed"
+
+            echo "Running integration tests..."
+            cd ~/apps/bookshelf-portal/bookshelf-portal/backend
+            venv/bin/pip install pytest --quiet
+            APP_PASSWORD=$(grep '^APP_PASSWORD=' ~/apps/bookshelf-portal/bookshelf-portal/.env | cut -d= -f2-)
+            APP_PASSWORD="$APP_PASSWORD" venv/bin/pytest tests/test_integration.py -v --tb=short
+            echo "Integration tests passed"
