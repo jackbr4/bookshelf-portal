@@ -61,6 +61,11 @@ logger = logging.getLogger(__name__)
 IMPORTED_CATEGORIES = {"books-imported", "readarr-imported"}
 CUTOFF_SECONDS = args.weeks * 7 * 24 * 3600
 
+# ~/Downloads/ is the old retired download path — everything there is eligible
+# regardless of age. ~/files/Downloads/ is the active path — age filter applies.
+OLD_DOWNLOADS = Path.home() / "Downloads"
+NEW_DOWNLOADS = Path.home() / "files" / "Downloads"
+
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -150,9 +155,8 @@ def main():
     dry = args.dry_run
 
     logger.info(
-        "%s — threshold: %d weeks (removing anything finished before %s)",
+        "%s — old path: remove all | new path: remove if finished before %s",
         "DRY RUN" if dry else "LIVE",
-        args.weeks,
         time.strftime("%Y-%m-%d", time.localtime(cutoff)),
     )
 
@@ -164,12 +168,27 @@ def main():
 
     logger.info("%d total torrents in rTorrent", len(all_torrents))
 
-    candidates = [
-        t for t in all_torrents
-        if t["category"] in IMPORTED_CATEGORIES
-        and t["finished_ts"] > 0
-        and t["finished_ts"] < cutoff
-    ]
+    def is_eligible(t: dict) -> bool:
+        if t["category"] not in IMPORTED_CATEGORIES:
+            return False
+        p = Path(t["base_path"]) if t["base_path"] else None
+        if p is None:
+            return False
+        # Old retired path: remove unconditionally
+        try:
+            p.relative_to(OLD_DOWNLOADS)
+            return True
+        except ValueError:
+            pass
+        # Active path: apply age filter
+        try:
+            p.relative_to(NEW_DOWNLOADS)
+            return t["finished_ts"] > 0 and t["finished_ts"] < cutoff
+        except ValueError:
+            pass
+        return False
+
+    candidates = [t for t in all_torrents if is_eligible(t)]
 
     if not candidates:
         logger.info("No torrents eligible for removal.")
@@ -180,12 +199,17 @@ def main():
     removed = errors = 0
 
     for t in sorted(candidates, key=lambda x: x["finished_ts"]):
-        age_days = int((time.time() - t["finished_ts"]) / 86400)
-        finished = time.strftime("%Y-%m-%d", time.localtime(t["finished_ts"]))
+        age_days = int((time.time() - t["finished_ts"]) / 86400) if t["finished_ts"] else 0
+        finished = time.strftime("%Y-%m-%d", time.localtime(t["finished_ts"])) if t["finished_ts"] else "unknown"
+        try:
+            Path(t["base_path"]).relative_to(OLD_DOWNLOADS)
+            reason = "old-path"
+        except ValueError:
+            reason = f"{age_days}d old"
         logger.info(
-            "%s %r  finished=%s  age=%dd  path=%s",
+            "%s %r  finished=%s  reason=%s  path=%s",
             "Would remove" if dry else "Removing",
-            t["name"], finished, age_days, t["base_path"],
+            t["name"], finished, reason, t["base_path"],
         )
 
         if dry:
