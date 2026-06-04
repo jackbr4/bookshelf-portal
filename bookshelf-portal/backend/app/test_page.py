@@ -11,7 +11,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --page-bg:      #F4F6F8;
+      --page-bg:      #F0F4F8;
       --surface:      #FFFFFF;
       --border:       #E2E8F0;
       --border-hover: #CBD5E1;
@@ -37,14 +37,20 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--page-bg);
+      background: linear-gradient(160deg, #E8EEF5 0%, #F7F9FC 100%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
     }
 
-    /* ── Header ── */
+    /* ── Header (sticky) ── */
     header {
-      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
       padding: 0.875rem 1.75rem;
       display: flex;
@@ -52,9 +58,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       justify-content: space-between;
     }
     header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
-    header a  { font-size: 0.8rem; color: var(--muted); text-decoration: none; transition: color 0.12s; }
-    header a:hover { color: var(--text); }
-    .header-nav { display: flex; align-items: center; gap: 1rem; }
+    .header-nav { display: flex; align-items: center; gap: 0.75rem; }
     .btn-admin {
       padding: 0.35rem 0.85rem;
       background: var(--page-bg);
@@ -87,7 +91,13 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       text-transform: uppercase;
       letter-spacing: 0.07em;
       color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .search-card .search-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
       margin-bottom: 1rem;
+      line-height: 1.5;
     }
     .search-row {
       display: flex;
@@ -102,6 +112,29 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       color: var(--text-sec);
       letter-spacing: 0.02em;
     }
+
+    /* ── Input with inline clear (option B) ── */
+    .input-wrap { position: relative; }
+    .input-wrap input[type="text"] { padding-right: 2rem; }
+    .input-clear {
+      position: absolute;
+      right: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0.15rem 0.2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .input-clear.visible { opacity: 0.5; pointer-events: auto; }
+    .input-clear:hover { opacity: 1 !important; }
+
     input[type="text"] {
       background: var(--page-bg);
       border: 1px solid var(--border);
@@ -141,6 +174,25 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     }
     .btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* Clear button (option A) */
+    .btn-clear {
+      display: none;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.3rem 0.75rem;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    .btn-clear:hover { background: var(--border); color: var(--text-sec); border-color: var(--border-hover); }
+
     .btn-dl {
       padding: 0.38rem 0.9rem;
       background: var(--success);
@@ -168,7 +220,9 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       justify-content: space-between;
       margin-bottom: 0.875rem;
       min-height: 1.75rem;
+      gap: 0.5rem;
     }
+    .toolbar-left { display: flex; align-items: center; gap: 0.625rem; }
     #status { font-size: 0.82rem; color: var(--muted); }
     #status .err { color: var(--danger); }
     #status .ok  { color: var(--success); }
@@ -217,7 +271,12 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     .badge-unk  { background: #E2E8F0; color: #4A5568; }
     .badge-rej  { background: var(--danger-bg); color: var(--danger-text); }
 
-    /* ── Release cards ── */
+    /* ── Release cards + fade-in ── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
     .card-list { display: flex; flex-direction: column; gap: 0.625rem; }
 
     .release-card {
@@ -232,7 +291,15 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
       position: relative;
       overflow: hidden;
+      animation: fadeInUp 0.18s ease-out both;
     }
+    .release-card:nth-child(1)  { animation-delay: 0.00s; }
+    .release-card:nth-child(2)  { animation-delay: 0.03s; }
+    .release-card:nth-child(3)  { animation-delay: 0.06s; }
+    .release-card:nth-child(4)  { animation-delay: 0.09s; }
+    .release-card:nth-child(5)  { animation-delay: 0.12s; }
+    .release-card:nth-child(n+6){ animation-delay: 0.15s; }
+
     .release-card::before {
       content: '';
       position: absolute;
@@ -273,7 +340,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       word-break: break-word;
     }
 
-    /* Score pill */
     .score-pill {
       font-size: 0.7rem;
       font-weight: 700;
@@ -285,13 +351,12 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       flex-shrink: 0;
     }
 
-    /* Advanced metadata row */
     .card-meta {
       display: flex;
       align-items: center;
       gap: 0.375rem;
       flex-wrap: wrap;
-      padding-left: calc(0.75rem + 0.5rem + 1px); /* align with title */
+      padding-left: calc(0.75rem + 0.5rem + 1px);
     }
     .meta-chip {
       font-size: 0.7rem;
@@ -310,23 +375,25 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       flex-shrink: 0;
     }
 
-    /* ── Rejected section ── */
+    /* ── Rejected section (pill badge toggle) ── */
     .rej-toggle {
       margin-top: 1rem;
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
-      background: none;
-      border: none;
+      background: var(--page-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
       color: var(--muted);
       cursor: pointer;
-      font-size: 0.78rem;
+      font-size: 0.75rem;
+      font-weight: 600;
       font-family: inherit;
-      padding: 0.25rem 0;
-      transition: color 0.12s;
+      padding: 0.3rem 0.875rem;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
     }
-    .rej-toggle:hover { color: var(--text-sec); }
-    .rej-toggle-arrow { transition: transform 0.2s; display: inline-block; }
+    .rej-toggle:hover { background: var(--border); color: var(--text-sec); border-color: var(--border-hover); }
+    .rej-toggle-arrow { transition: transform 0.2s; display: inline-block; font-size: 0.65rem; }
     .rej-body { margin-top: 0.625rem; display: none; }
 
     .rej-list { display: flex; flex-direction: column; gap: 0.375rem; }
@@ -399,7 +466,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     #login-screen {
       position: fixed;
       inset: 0;
-      background: var(--page-bg);
+      background: linear-gradient(160deg, #E8EEF5 0%, #F7F9FC 100%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -414,7 +481,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       padding: 2.5rem 2rem 2rem;
       width: 100%;
       max-width: 400px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
       text-align: center;
     }
     .login-card .login-icon {
@@ -521,6 +588,15 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       color: var(--muted);
       margin-bottom: 0.625rem;
     }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      header { padding: 0.75rem 1rem; }
+      main   { padding: 1.25rem 1rem; }
+      .card-body { flex-direction: column; align-items: flex-start; }
+      .btn-dl { align-self: flex-start; }
+      #toast { min-width: calc(100vw - 2rem); max-width: calc(100vw - 2rem); }
+    }
   </style>
 </head>
 <body>
@@ -548,22 +624,31 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <main>
   <div class="search-card">
     <h2>Search for Books</h2>
-    <p style="font-size:0.82rem; color:var(--muted); margin-bottom:1rem; margin-top:-0.5rem;">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
+    <p class="search-hint">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
     <div class="search-row">
       <div class="field">
         <label>Title</label>
-        <input type="text" id="inp-title" placeholder="e.g. A Children's Bible" autocomplete="off" />
+        <div class="input-wrap">
+          <input type="text" id="inp-title" placeholder="e.g. A Children's Bible" autocomplete="off" oninput="updateInputClears()" />
+          <button class="input-clear" id="clear-inp-title" onclick="clearInput('inp-title')" aria-label="Clear title" tabindex="-1">&times;</button>
+        </div>
       </div>
       <div class="field">
         <label>Author</label>
-        <input type="text" id="inp-author" placeholder="e.g. Lydia Millet" autocomplete="off" />
+        <div class="input-wrap">
+          <input type="text" id="inp-author" placeholder="e.g. Lydia Millet" autocomplete="off" oninput="updateInputClears()" />
+          <button class="input-clear" id="clear-inp-author" onclick="clearInput('inp-author')" aria-label="Clear author" tabindex="-1">&times;</button>
+        </div>
       </div>
       <button class="btn-search" id="btn-search" onclick="fetchReleases()">Search</button>
     </div>
   </div>
 
   <div class="toolbar">
-    <div id="status"></div>
+    <div class="toolbar-left">
+      <div id="status"></div>
+      <button class="btn-clear" id="btn-clear" onclick="clearSearch()">&#x2715; Clear</button>
+    </div>
     <div class="view-toggle" id="view-toggle" style="display:none">
       <button id="btn-basic" class="active" onclick="setView('basic')">Simple</button>
       <button id="btn-advanced" onclick="setView('advanced')">Detailed</button>
@@ -600,6 +685,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   function handle401() {
     document.getElementById('results').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
     setStatus('');
     showLoginScreen();
   }
@@ -630,7 +716,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       err.textContent = 'Could not reach server. Try again.';
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Sign in';
+      btn.textContent = 'Continue';
     }
   }
 
@@ -638,24 +724,48 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     await fetch('/portal/logout', { method: 'POST', credentials: 'include' });
     document.getElementById('results').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
+    document.getElementById('inp-title').value = '';
+    document.getElementById('inp-author').value = '';
+    updateInputClears();
     setStatus('');
     _accepted = []; _rejected = [];
     showLoginScreen();
   }
 
-  /* Check session on load — skip the login screen if already authenticated */
+  /* Check session on load */
   (async function checkSession() {
     try {
       const resp = await fetch('/portal/history?limit=1', { credentials: 'include' });
-      if (resp.ok) {
-        hideLoginScreen();
-      } else {
-        showLoginScreen();
-      }
-    } catch (e) {
-      showLoginScreen();
-    }
+      if (resp.ok) { hideLoginScreen(); } else { showLoginScreen(); }
+    } catch (e) { showLoginScreen(); }
   })();
+
+  /* ── Input clear (option B) ── */
+  function updateInputClears() {
+    ['inp-title', 'inp-author'].forEach(id => {
+      const val = document.getElementById(id).value;
+      document.getElementById('clear-' + id).classList.toggle('visible', val.length > 0);
+    });
+  }
+
+  function clearInput(id) {
+    document.getElementById(id).value = '';
+    document.getElementById('clear-' + id).classList.remove('visible');
+    document.getElementById(id).focus();
+  }
+
+  /* ── Clear search (option A) ── */
+  function clearSearch() {
+    document.getElementById('inp-title').value = '';
+    document.getElementById('inp-author').value = '';
+    updateInputClears();
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
+    setStatus('');
+    _accepted = []; _rejected = [];
+  }
 
   /* ── View toggle ── */
   function setView(v) {
@@ -677,6 +787,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     setStatus('');
     document.getElementById('results').innerHTML = '';
     document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
     _accepted = []; _rejected = [];
 
     const qs = new URLSearchParams();
@@ -705,6 +816,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     if (!accepted.length && !rejected.length) {
       document.getElementById('view-toggle').style.display = 'none';
+      document.getElementById('btn-clear').style.display = 'none';
       el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found for this search. Try a different title or author.</p></div>';
       setStatus('');
       return;
@@ -716,13 +828,14 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     setStatus(label + (rejected.length ? ' &nbsp;&middot;&nbsp; ' + rejected.length + ' filtered out' : ''));
 
     document.getElementById('view-toggle').style.display = accepted.length ? 'flex' : 'none';
+    document.getElementById('btn-clear').style.display = 'inline-flex';
 
     let html = '';
 
     if (!accepted.length) {
       html += '<div class="empty-state"><div class="empty-icon">🔍</div><p>No downloadable releases found — ' + rejected.length + ' were filtered out.</p></div>';
     } else {
-      html += '<div class="section-heading">' + accepted.length + ' accepted release' + (accepted.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="section-heading">' + accepted.length + ' release' + (accepted.length !== 1 ? 's' : '') + ' found</div>';
       html += '<div class="card-list">';
       accepted.forEach((r, i) => {
         const fmt = (r.detected_format || '').toLowerCase();
@@ -740,8 +853,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
         if (_view === 'advanced') {
           const chips = [];
-          if (r.indexer)   chips.push(esc(r.indexer));
-          if (r.size_mb != null) chips.push(r.size_mb.toFixed(1) + ' MB');
+          if (r.indexer)         chips.push(esc(r.indexer));
+          if (r.size_mb != null) chips.push(r.size_mb.toFixed(1) + ' MB');
           if (r.seeders != null) chips.push(r.seeders + ' seeds');
           if (r.age_days != null) chips.push(r.age_days + 'd old');
 
@@ -760,10 +873,9 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       html += '</div>';
     }
 
-    /* ── Rejected section ── */
     if (rejected.length) {
       html += '<button class="rej-toggle" id="rej-btn" onclick="toggleRejected()">'
-            + '<span class="rej-toggle-arrow" id="rej-arrow">▶</span>'
+            + '<span class="rej-toggle-arrow" id="rej-arrow">&#9654;</span>'
             + ' ' + rejected.length + ' filtered out</button>';
       html += '<div class="rej-body" id="rej-body"><div class="rej-list">';
       rejected.forEach(r => {
@@ -834,7 +946,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       if (resp.status === 401) { handle401(); return; }
       const data = await resp.json();
       if (data.ok) {
-        showToast(displayTitle + ' is being downloaded and should be available in the Calibre Library in a few minutes.', 'success');
+        showToast(displayTitle + ' is being downloaded and should be available in the Calibre library within 1–2 minutes.', 'success');
       } else {
         throw new Error(data.detail || JSON.stringify(data));
       }
