@@ -56,7 +56,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: space-between;
-      will-change: transform;
     }
     header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
     .header-nav { display: flex; align-items: center; gap: 0.75rem; }
@@ -721,6 +720,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
   function hideLoginScreen() {
     document.getElementById('login-screen').classList.add('hidden');
+    window.scrollTo(0, 0);
   }
 
   function handle401() {
