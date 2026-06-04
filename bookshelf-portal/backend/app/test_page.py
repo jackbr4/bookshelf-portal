@@ -2,7 +2,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Book Request Portal</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>📚</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -56,6 +56,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: space-between;
+      will-change: transform;
     }
     header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
     .header-nav { display: flex; align-items: center; gap: 0.75rem; }
@@ -591,11 +592,51 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     /* ── Mobile ── */
     @media (max-width: 600px) {
-      header { padding: 0.75rem 1rem; }
-      main   { padding: 1.25rem 1rem; }
+      body {
+        background-attachment: scroll;
+      }
+      header {
+        padding: 0.75rem 1rem;
+        padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+      }
+      header h1 { font-size: 0.9rem; }
+      .btn-admin, .btn-signout {
+        padding: 0.45rem 0.75rem;
+        min-height: 36px;
+      }
+      main {
+        padding: 1.25rem 1rem;
+        padding-left: max(1rem, env(safe-area-inset-left, 0px));
+        padding-right: max(1rem, env(safe-area-inset-right, 0px));
+      }
+
+      /* Prevent iOS input zoom: font-size must be >= 16px */
+      input[type="text"],
+      input[type="password"] { font-size: 16px; }
+
+      /* Stack search fields + full-width search button */
+      .search-row { flex-direction: column; gap: 0.5rem; }
+      .field { min-width: 0; }
+      .btn-search { width: 100%; padding: 0.75rem 1rem; }
+
       .card-body { flex-direction: column; align-items: flex-start; }
-      .btn-dl { align-self: flex-start; }
-      #toast { min-width: calc(100vw - 2rem); max-width: calc(100vw - 2rem); }
+      .btn-dl {
+        align-self: flex-start;
+        min-height: 44px;
+        padding: 0.55rem 1.1rem;
+      }
+
+      /* Toast: anchor to left/right edges instead of center-translate */
+      #toast {
+        left: 1rem;
+        right: 1rem;
+        bottom: max(1.5rem, calc(1rem + env(safe-area-inset-bottom, 0px)));
+        min-width: 0;
+        max-width: none;
+        width: auto;
+        transform: translateY(8px);
+      }
+      #toast.visible { transform: translateY(0); }
     }
   </style>
 </head>
