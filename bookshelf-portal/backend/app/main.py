@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -224,6 +224,11 @@ async def admin_page(session=Depends(get_session)):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/portal/test", status_code=302)
 
 
 # Serve the built React frontend for all non-API routes (SPA fallback).
