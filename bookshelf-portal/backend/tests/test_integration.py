@@ -31,10 +31,16 @@ def test_health():
     assert r.json() == {"status": "ok"}
 
 
-def test_test_page_loads():
-    r = httpx.get(f"{BASE}/portal/test")
+def test_portal_page_loads():
+    r = httpx.get(f"{BASE}/portal")
     assert r.status_code == 200
     assert "Book Request Portal" in r.text
+
+
+def test_portal_test_redirects():
+    r = httpx.get(f"{BASE}/portal/test", follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"].endswith("/portal")
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
