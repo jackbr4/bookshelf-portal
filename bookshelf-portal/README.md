@@ -61,7 +61,13 @@ Starts the backend (port 8788) and frontend dev server (port 5173) with hot relo
 
 ### Multi-user profiles
 
-Family members can add their own Goodreads profiles directly through the portal. Go to **Admin → Goodreads Profiles** and paste in a Goodreads user ID (the `12345678-firstname` portion of the profile URL). Each profile can use a different shelf name (default: `to-read`). Deduplication is global — a book already queued or in Calibre won't be downloaded twice regardless of which profile requested it.
+Family members can add their own Goodreads profiles directly through the portal. Go to **Admin → Goodreads Profiles** and paste in a Goodreads user ID (the `12345678-firstname` portion of the profile URL). Each profile can use a different shelf name (default: `to-read`).
+
+**Backlog control:** by default, only books added to the shelf *after* the profile is created are synced ("new additions only"). Checking **"Download all books from my Want to Read shelf"** when adding a profile enables full-backlog mode — the entire shelf is eligible for download, worked through gradually across successive cron runs subject to the MAM slot cap. A note in the UI warns that a large shelf may take a few days to fully import.
+
+Each profile card in the Admin UI shows its sync mode: **Full shelf** or **New additions from YYYY-MM-DD**, so it's always clear how a profile is configured.
+
+Deduplication is global — a book already queued or in Calibre won't be downloaded twice regardless of which profile requested it.
 
 Profiles are managed in the `goodreads_profiles` table of the history database. The first profile is auto-migrated from `GOODREADS_USER_ID` in `.env` on the initial run.
 
