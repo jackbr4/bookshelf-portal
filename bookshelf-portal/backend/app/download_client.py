@@ -171,6 +171,82 @@ class DownloadClient:
         )
         return info_hash
 
+    async def count_mam_unsatisfied(self) -> int:
+        """
+        Count rTorrent torrents from MyAnonamouse that haven't yet satisfied the
+        72-hour seeding requirement (still downloading OR seeded < 72 h).
+
+        Returns 0 if rTorrent is unreachable so the caller can still attempt
+        dispatches (which will fail on their own if rTorrent is down).
+        """
+        if self._torrent_client != "rtorrent":
+            return 0
+
+        # d.tracker_url= silently breaks d.multicall2 on this rTorrent build.
+        # Instead we identify MAM torrents by the category label our dispatcher
+        # sets (d.custom1): "books" while downloading, "books-imported" after
+        # the watcher moves the file into Calibre.  Both count against MAM's limit.
+        body = (
+            '<?xml version="1.0"?>'
+            "<methodCall>"
+            "<methodName>d.multicall2</methodName>"
+            "<params>"
+            '<param><value><string></string></value></param>'
+            '<param><value><string>main</string></value></param>'
+            '<param><value><string>d.timestamp.finished=</string></value></param>'
+            '<param><value><string>d.custom1=</string></value></param>'
+            "</params>"
+            "</methodCall>"
+        )
+        try:
+            resp = await self._rt_client.post(
+                self._rt_url,
+                content=body,
+                headers={"Content-Type": "text/xml"},
+                auth=self._rt_auth,
+            )
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("[rtorrent] failed to query MAM slot count: %s", exc)
+            return 0
+
+        import time
+        now = time.time()
+        unsatisfied = 0
+
+        def _int_val(el) -> int:
+            for tag in ("i8", "i4", "int"):
+                v = el.findtext(tag)
+                if v is not None:
+                    return int(v)
+            return 0
+
+        try:
+            root = ET.fromstring(resp.text)
+            outer_data = root.find(".//params/param/value/array/data")
+            if outer_data is None:
+                return 0
+            for torrent_val in outer_data.findall("value"):
+                inner_data = torrent_val.find("array/data")
+                if inner_data is None:
+                    continue
+                fields = inner_data.findall("value")
+                if len(fields) < 2:
+                    continue
+                label = (fields[1].findtext("string") or "").strip()
+                if label not in (self._rt_category, self._rt_imported_category):
+                    continue
+                finished_at = _int_val(fields[0])
+                seeding_seconds = (now - finished_at) if finished_at > 0 else 0
+                if seeding_seconds < 72 * 3600:
+                    unsatisfied += 1
+        except (ET.ParseError, ValueError) as exc:
+            logger.warning("[rtorrent] failed to parse MAM slot response: %s", exc)
+            return 0
+
+        logger.info("[rtorrent] MAM unsatisfied torrents: %d", unsatisfied)
+        return unsatisfied
+
     async def _get_all_hashes(self) -> set[str]:
         """Return the set of all info_hashes currently in rTorrent."""
         body = (

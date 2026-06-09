@@ -656,7 +656,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <header>
   <h1>Book Request Portal</h1>
   <div class="header-nav">
-    <a href="/portal/admin" class="btn-admin">History</a>
+    <a href="/portal/admin" class="btn-admin">Admin</a>
     <button class="btn-signout" onclick="doSignOut()">Sign out</button>
   </div>
 </header>

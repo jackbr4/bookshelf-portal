@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -211,14 +211,46 @@ async def get_history(session=Depends(get_session), limit: int = 500):
     return HistoryResponse(items=[HistoryItem(**i) for i in items])
 
 
-@app.get("/portal/test", response_class=HTMLResponse, include_in_schema=False)
-async def test_page():
+@app.get("/portal", response_class=HTMLResponse, include_in_schema=False)
+async def portal_page():
     return HTMLResponse(content=TEST_PAGE_HTML)
+
+
+@app.get("/portal/test", include_in_schema=False)
+async def portal_test_redirect():
+    return RedirectResponse(url="/portal", status_code=301)
 
 
 @app.get("/portal/admin", response_class=HTMLResponse, include_in_schema=False)
 async def admin_page(session=Depends(get_session)):
     return HTMLResponse(content=ADMIN_PAGE_HTML)
+
+
+@app.get("/portal/goodreads-profiles", include_in_schema=False)
+async def list_goodreads_profiles(session=Depends(get_session)):
+    return JSONResponse({"profiles": history_db.get_goodreads_profiles()})
+
+
+@app.post("/portal/goodreads-profiles", include_in_schema=False)
+async def add_goodreads_profile(
+    session=Depends(get_session),
+    body: dict = Body(...),
+):
+    name = (body.get("name") or "").strip()
+    user_id = (body.get("user_id") or "").strip()
+    shelf = (body.get("shelf") or "to-read").strip()
+    if not name or not user_id:
+        raise HTTPException(status_code=400, detail="name and user_id are required")
+    profile_id = history_db.add_goodreads_profile(name=name, user_id=user_id, shelf=shelf)
+    logger.info("Added Goodreads profile: %s (%s)", name, user_id)
+    return JSONResponse({"ok": True, "id": profile_id})
+
+
+@app.delete("/portal/goodreads-profiles/{profile_id}", include_in_schema=False)
+async def delete_goodreads_profile(profile_id: str, session=Depends(get_session)):
+    history_db.delete_goodreads_profile(profile_id)
+    logger.info("Deleted Goodreads profile: %s", profile_id)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/health")
@@ -228,7 +260,7 @@ async def health():
 
 @app.get("/", include_in_schema=False)
 async def root_redirect():
-    return RedirectResponse(url="/portal/test", status_code=302)
+    return RedirectResponse(url="/portal", status_code=302)
 
 
 # Serve the built React frontend for all non-API routes (SPA fallback).

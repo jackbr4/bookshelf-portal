@@ -169,24 +169,26 @@ def main():
     logger.info("%d total torrents in rTorrent", len(all_torrents))
 
     def is_eligible(t: dict) -> bool:
-        if t["category"] not in IMPORTED_CATEGORIES:
-            return False
         p = Path(t["base_path"]) if t["base_path"] else None
         if p is None:
             return False
+
+        cat = t["category"]
+        in_old = p == OLD_DOWNLOADS or str(p).startswith(str(OLD_DOWNLOADS) + "/")
+        in_new = p == NEW_DOWNLOADS or str(p).startswith(str(NEW_DOWNLOADS) + "/")
+
+        if not (in_old or in_new):
+            return False  # not a book download path — never touch it
+
+        # Accept confirmed-imported labels OR no label at all (unlabelled in Downloads)
+        if cat not in IMPORTED_CATEGORIES and cat != "":
+            return False
+
         # Old retired path: remove unconditionally
-        try:
-            p.relative_to(OLD_DOWNLOADS)
+        if in_old:
             return True
-        except ValueError:
-            pass
         # Active path: apply age filter
-        try:
-            p.relative_to(NEW_DOWNLOADS)
-            return t["finished_ts"] > 0 and t["finished_ts"] < cutoff
-        except ValueError:
-            pass
-        return False
+        return t["finished_ts"] > 0 and t["finished_ts"] < cutoff
 
     candidates = [t for t in all_torrents if is_eligible(t)]
 
@@ -201,10 +203,12 @@ def main():
     for t in sorted(candidates, key=lambda x: x["finished_ts"]):
         age_days = int((time.time() - t["finished_ts"]) / 86400) if t["finished_ts"] else 0
         finished = time.strftime("%Y-%m-%d", time.localtime(t["finished_ts"])) if t["finished_ts"] else "unknown"
-        try:
-            Path(t["base_path"]).relative_to(OLD_DOWNLOADS)
+        bp = t["base_path"]
+        if bp.startswith(str(OLD_DOWNLOADS) + "/") or bp == str(OLD_DOWNLOADS):
             reason = "old-path"
-        except ValueError:
+        elif t["category"] == "":
+            reason = f"unlabelled/{age_days}d old"
+        else:
             reason = f"{age_days}d old"
         logger.info(
             "%s %r  finished=%s  reason=%s  path=%s",

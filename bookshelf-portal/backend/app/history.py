@@ -50,6 +50,16 @@ class HistoryDB:
                     error           TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS goodreads_seen (
+                    goodreads_id        TEXT PRIMARY KEY,
+                    title               TEXT NOT NULL,
+                    author              TEXT NOT NULL,
+                    status              TEXT NOT NULL,
+                    download_record_id  TEXT,
+                    first_seen_at       TEXT NOT NULL,
+                    last_checked_at     TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS imports (
                     id              TEXT PRIMARY KEY,
                     download_id     TEXT REFERENCES downloads(id),
@@ -58,6 +68,15 @@ class HistoryDB:
                     status          TEXT NOT NULL,
                     imported_at     TEXT,
                     error           TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS goodreads_profiles (
+                    id          TEXT PRIMARY KEY,
+                    name        TEXT NOT NULL,
+                    user_id     TEXT NOT NULL,
+                    shelf       TEXT NOT NULL DEFAULT 'to-read',
+                    active      INTEGER NOT NULL DEFAULT 1,
+                    created_at  TEXT NOT NULL
                 );
             """)
 
@@ -153,3 +172,78 @@ class HistoryDB:
                 (download_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Goodreads shelf sync
+    # ------------------------------------------------------------------
+
+    def goodreads_already_seen(self, goodreads_id: str) -> bool:
+        """
+        True if this Goodreads book should be skipped this run.
+        - 'queued' and 'in_calibre': skip forever.
+        - 'no_release': retry after 14 days so newly-available releases are caught.
+        """
+        from datetime import timedelta
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT status, last_checked_at FROM goodreads_seen WHERE goodreads_id=?",
+                (goodreads_id,),
+            ).fetchone()
+        if row is None:
+            return False
+        if row["status"] in ("queued", "in_calibre"):
+            return True
+        if row["status"] == "no_release":
+            last = datetime.fromisoformat(row["last_checked_at"])
+            return (datetime.now(timezone.utc) - last) < timedelta(days=14)
+        return False
+
+    def goodreads_mark_seen(
+        self,
+        goodreads_id: str,
+        title: str,
+        author: str,
+        status: str,
+        download_record_id: Optional[str] = None,
+    ):
+        now = _now()
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO goodreads_seen
+                   (goodreads_id, title, author, status, download_record_id,
+                    first_seen_at, last_checked_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(goodreads_id) DO UPDATE SET
+                       status=excluded.status,
+                       download_record_id=excluded.download_record_id,
+                       last_checked_at=excluded.last_checked_at""",
+                (goodreads_id, title, author, status, download_record_id, now, now),
+            )
+
+    # ------------------------------------------------------------------
+    # Goodreads profiles
+    # ------------------------------------------------------------------
+
+    def get_goodreads_profiles(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM goodreads_profiles WHERE active=1 ORDER BY created_at"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_goodreads_profile(self, name: str, user_id: str, shelf: str = "to-read") -> str:
+        profile_id = str(uuid.uuid4())
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO goodreads_profiles (id, name, user_id, shelf, active, created_at)
+                   VALUES (?, ?, ?, ?, 1, ?)""",
+                (profile_id, name, user_id, shelf, _now()),
+            )
+        return profile_id
+
+    def delete_goodreads_profile(self, profile_id: str):
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE goodreads_profiles SET active=0 WHERE id=?",
+                (profile_id,),
+            )

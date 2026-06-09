@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     allowed_origins: List[str] = ["http://localhost:5173", "http://localhost:4173"]
     google_books_api_key: Optional[str] = None
 
+    # --- Goodreads shelf sync ---
+    goodreads_user_id: str = ""
+    goodreads_shelf: str = "to-read"
+    goodreads_max_per_run: int = 3
+    # MAM enforces a 150-torrent cap on unsatisfied (seeding < 72 h) downloads.
+    # Exceeding it triggers a 3-day ban. This is checked before each run.
+    mam_max_unsatisfied: int = 150
+
     # --- Release filter tuning ---
     # Indexers matching any of these substrings (case-insensitive) skip the
     # 512 KB minimum-size check.  Useful for curated trackers where short
