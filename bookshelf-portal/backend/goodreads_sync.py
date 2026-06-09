@@ -17,10 +17,12 @@ Cron (daily at 8am):
 
 import argparse
 import asyncio
+import email.utils
 import logging
 import re
 import sys
 import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -98,9 +100,10 @@ def fetch_shelf(user_id: str, shelf: str) -> list[dict]:
             gr_id = (item.findtext("book_id") or item.findtext(".//book/id") or "").strip()
             title = (item.findtext("title") or "").strip()
             author = (item.findtext("author_name") or "").strip()
+            date_added = _parse_gr_date(item.findtext("user_date_added") or "")
 
             if gr_id and title:
-                books.append({"goodreads_id": gr_id, "title": title, "author": author})
+                books.append({"goodreads_id": gr_id, "title": title, "author": author, "date_added": date_added})
 
         if len(items) < 200:
             break
@@ -108,6 +111,23 @@ def fetch_shelf(user_id: str, shelf: str) -> list[dict]:
 
     logger.info("Fetched %d book(s) from shelf %r (user %s)", len(books), shelf, user_id)
     return books
+
+
+# ---------------------------------------------------------------------------
+# Date helpers
+# ---------------------------------------------------------------------------
+
+def _parse_gr_date(s: str):
+    """Parse a Goodreads RSS user_date_added string → date, or None on failure."""
+    if not s:
+        return None
+    try:
+        tt = email.utils.parsedate(s.strip())
+        if tt:
+            return date(*tt[:3])
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +279,14 @@ async def _run():
         logger.info("--- Profile: %s (user=%s shelf=%r) ---", name, user_id, shelf)
         shelf_books = fetch_shelf(user_id, shelf)
 
+        sync_from_date = None
+        if profile.get("sync_from"):
+            try:
+                sync_from_date = date.fromisoformat(profile["sync_from"])
+                logger.info("Filtering to books added on or after %s", sync_from_date)
+            except ValueError:
+                pass
+
         for book in shelf_books:
             if dispatched >= max_run:
                 logger.info("Reached max_per_run=%d — stopping for today", max_run)
@@ -267,6 +295,12 @@ async def _run():
             gr_id  = book["goodreads_id"]
             title  = book["title"]
             author = book["author"]
+
+            if sync_from_date is not None:
+                book_date = book.get("date_added")
+                if book_date is not None and book_date < sync_from_date:
+                    logger.debug("Skip (added %s, before sync_from %s): %r", book_date, sync_from_date, title)
+                    continue
 
             if db.goodreads_already_seen(gr_id):
                 logger.debug("Skip (already seen): %r", title)

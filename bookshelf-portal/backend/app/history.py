@@ -35,6 +35,12 @@ class HistoryDB:
 
     def _init_schema(self):
         with self._conn() as conn:
+            # Add sync_from column to existing goodreads_profiles tables that predate it
+            try:
+                conn.execute("ALTER TABLE goodreads_profiles ADD COLUMN sync_from TEXT")
+            except Exception:
+                pass  # column already exists
+
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS downloads (
                     id              TEXT PRIMARY KEY,
@@ -75,6 +81,7 @@ class HistoryDB:
                     name        TEXT NOT NULL,
                     user_id     TEXT NOT NULL,
                     shelf       TEXT NOT NULL DEFAULT 'to-read',
+                    sync_from   TEXT,
                     active      INTEGER NOT NULL DEFAULT 1,
                     created_at  TEXT NOT NULL
                 );
@@ -231,13 +238,19 @@ class HistoryDB:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def add_goodreads_profile(self, name: str, user_id: str, shelf: str = "to-read") -> str:
+    def add_goodreads_profile(
+        self,
+        name: str,
+        user_id: str,
+        shelf: str = "to-read",
+        sync_from: Optional[str] = None,
+    ) -> str:
         profile_id = str(uuid.uuid4())
         with self._conn() as conn:
             conn.execute(
-                """INSERT INTO goodreads_profiles (id, name, user_id, shelf, active, created_at)
-                   VALUES (?, ?, ?, ?, 1, ?)""",
-                (profile_id, name, user_id, shelf, _now()),
+                """INSERT INTO goodreads_profiles (id, name, user_id, shelf, sync_from, active, created_at)
+                   VALUES (?, ?, ?, ?, ?, 1, ?)""",
+                (profile_id, name, user_id, shelf, sync_from, _now()),
             )
         return profile_id
 

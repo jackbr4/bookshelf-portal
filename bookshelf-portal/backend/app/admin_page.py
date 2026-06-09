@@ -398,11 +398,46 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .btn-add:hover:not(:disabled) { background: #0b5ed7; }
     .btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .backlog-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-top: 0.25rem;
+    }
+    .backlog-row input[type="checkbox"] {
+      margin-top: 0.15rem;
+      flex-shrink: 0;
+      accent-color: var(--primary);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+    .backlog-row label {
+      font-size: 0.82rem;
+      color: var(--text-sec);
+      cursor: pointer;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .backlog-notice {
+      font-size: 0.78rem;
+      color: var(--warning-text);
+      background: var(--warning-bg);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.75rem;
+      display: none;
+      line-height: 1.5;
+    }
+    .backlog-notice.visible { display: block; }
+
     .form-msg {
       font-size: 0.78rem;
       padding: 0.4rem 0.65rem;
       border-radius: var(--radius-sm);
       display: none;
+      margin-top: 0.75rem;
     }
     .form-msg.success { display: block; background: var(--success-bg); color: var(--success-text); }
     .form-msg.error   { display: block; background: var(--danger-bg);  color: var(--danger-text); }
@@ -481,6 +516,13 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
           <input id="inp-shelf" type="text" placeholder="to-read" value="to-read" autocomplete="off">
         </div>
         <button class="btn-add" onclick="addProfile()">Add profile</button>
+      </div>
+      <div class="backlog-row">
+        <input type="checkbox" id="chk-backlog" onchange="toggleBacklog()">
+        <label for="chk-backlog">Download all books from my Want to Read shelf</label>
+      </div>
+      <div class="backlog-notice" id="backlog-notice">
+        Depending on the number of books in your shelf, it could take a few days to add them all to the Calibre library.
       </div>
       <div class="form-msg" id="form-msg"></div>
     </div>
@@ -645,23 +687,34 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       return;
     }
 
-    list.innerHTML = profiles.map(p => `
-      <div class="profile-card" id="profile-${esc(p.id)}">
-        <div class="profile-info">
-          <div class="profile-name">${esc(p.name)}</div>
-          <div class="profile-meta">ID: ${esc(p.user_id)} &nbsp;·&nbsp; Shelf: ${esc(p.shelf)}</div>
+    list.innerHTML = profiles.map(p => {
+      const syncLabel = p.sync_from
+        ? 'New additions from ' + p.sync_from
+        : 'Full shelf';
+      return `
+        <div class="profile-card" id="profile-${esc(p.id)}">
+          <div class="profile-info">
+            <div class="profile-name">${esc(p.name)}</div>
+            <div class="profile-meta">ID: ${esc(p.user_id)} &nbsp;·&nbsp; Shelf: ${esc(p.shelf)} &nbsp;·&nbsp; ${esc(syncLabel)}</div>
+          </div>
+          <button class="btn-remove" onclick="removeProfile('${esc(p.id)}', '${esc(p.name)}')">Remove</button>
         </div>
-        <button class="btn-remove" onclick="removeProfile('${esc(p.id)}', '${esc(p.name)}')">Remove</button>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+  }
+
+  function toggleBacklog() {
+    const checked = document.getElementById('chk-backlog').checked;
+    document.getElementById('backlog-notice').classList.toggle('visible', checked);
   }
 
   async function addProfile() {
-    const name  = document.getElementById('inp-name').value.trim();
-    const uid   = document.getElementById('inp-uid').value.trim();
-    const shelf = document.getElementById('inp-shelf').value.trim() || 'to-read';
-    const msg   = document.getElementById('form-msg');
-    const btn   = document.querySelector('.btn-add');
+    const name     = document.getElementById('inp-name').value.trim();
+    const uid      = document.getElementById('inp-uid').value.trim();
+    const shelf    = document.getElementById('inp-shelf').value.trim() || 'to-read';
+    const fullSync = document.getElementById('chk-backlog').checked;
+    const msg      = document.getElementById('form-msg');
+    const btn      = document.querySelector('.btn-add');
 
     msg.className = 'form-msg';
     msg.textContent = '';
@@ -669,13 +722,16 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     if (!name) { showMsg('error', 'Please enter a first name.'); return; }
     if (!uid)  { showMsg('error', 'Please enter a Goodreads user ID.'); return; }
 
+    // null = full backlog; today's date = new additions only from this point forward
+    const sync_from = fullSync ? null : new Date().toISOString().slice(0, 10);
+
     btn.disabled = true;
     try {
       const resp = await fetch('/portal/goodreads-profiles', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, user_id: uid, shelf }),
+        body: JSON.stringify({ name, user_id: uid, shelf, sync_from }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -684,6 +740,8 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       document.getElementById('inp-name').value  = '';
       document.getElementById('inp-uid').value   = '';
       document.getElementById('inp-shelf').value = 'to-read';
+      document.getElementById('chk-backlog').checked = false;
+      document.getElementById('backlog-notice').classList.remove('visible');
       showMsg('success', `Profile for ${name} added. It will be picked up on the next sync.`);
       _profilesLoaded = false;
       loadProfiles();

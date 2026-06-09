@@ -239,10 +239,14 @@ async def add_goodreads_profile(
     name = (body.get("name") or "").strip()
     user_id = (body.get("user_id") or "").strip()
     shelf = (body.get("shelf") or "to-read").strip()
+    # sync_from=None means full backlog; a date string means new additions only from that date
+    sync_from = body.get("sync_from")  # already None or a YYYY-MM-DD string
     if not name or not user_id:
         raise HTTPException(status_code=400, detail="name and user_id are required")
-    profile_id = history_db.add_goodreads_profile(name=name, user_id=user_id, shelf=shelf)
-    logger.info("Added Goodreads profile: %s (%s)", name, user_id)
+    profile_id = history_db.add_goodreads_profile(
+        name=name, user_id=user_id, shelf=shelf, sync_from=sync_from,
+    )
+    logger.info("Added Goodreads profile: %s (%s) sync_from=%s", name, user_id, sync_from)
     return JSONResponse({"ok": True, "id": profile_id})
 
 
