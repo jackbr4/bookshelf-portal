@@ -22,15 +22,14 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "Migrating untracked files from old nested layout (one-time)..."
-            if [ -f ~/apps/bookshelf-portal/bookshelf-portal/.env ] && [ ! -f ~/apps/bookshelf-portal/.env ]; then
-              mv ~/apps/bookshelf-portal/bookshelf-portal/.env ~/apps/bookshelf-portal/.env
-              echo "  Moved .env"
+            echo "Setting up backend venv..."
+            cd ~/apps/bookshelf-portal/backend
+            if ! venv/bin/python -c "import sys" >/dev/null 2>&1; then
+              echo "  Creating fresh venv (first deploy or shebangs stale after path change)..."
+              python3 -m venv venv
+              venv/bin/pip install -r requirements.txt -q
             fi
-            if [ -d ~/apps/bookshelf-portal/bookshelf-portal/backend/venv ] && [ ! -d ~/apps/bookshelf-portal/backend/venv ]; then
-              mv ~/apps/bookshelf-portal/bookshelf-portal/backend/venv ~/apps/bookshelf-portal/backend/venv
-              echo "  Moved venv"
-            fi
+            cd ~/apps/bookshelf-portal
 
             echo "Building container..."
             COMMIT=$(git rev-parse HEAD)
