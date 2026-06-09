@@ -22,12 +22,22 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            echo "Migrating untracked files from old nested layout (one-time)..."
+            if [ -f ~/apps/bookshelf-portal/bookshelf-portal/.env ] && [ ! -f ~/apps/bookshelf-portal/.env ]; then
+              mv ~/apps/bookshelf-portal/bookshelf-portal/.env ~/apps/bookshelf-portal/.env
+              echo "  Moved .env"
+            fi
+            if [ -d ~/apps/bookshelf-portal/bookshelf-portal/backend/venv ] && [ ! -d ~/apps/bookshelf-portal/backend/venv ]; then
+              mv ~/apps/bookshelf-portal/bookshelf-portal/backend/venv ~/apps/bookshelf-portal/backend/venv
+              echo "  Moved venv"
+            fi
+
             echo "Building container..."
             COMMIT=$(git rev-parse HEAD)
             podman build \
               --build-arg CACHE_BUST="$COMMIT" \
               -t bookshelf-request-portal \
-              ./bookshelf-portal
+              .
 
             echo "Stopping old container..."
             podman update --restart=no bookshelf-request-portal || true
@@ -42,7 +52,7 @@ jobs:
             podman run -d --name bookshelf-request-portal \
               --restart=always \
               --network=host \
-              --env-file ~/apps/bookshelf-portal/bookshelf-portal/.env \
+              --env-file ~/apps/bookshelf-portal/.env \
               -v /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro \
               -v /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db \
               bookshelf-request-portal
@@ -52,8 +62,8 @@ jobs:
             echo "Health check passed"
 
             echo "Running integration tests..."
-            cd ~/apps/bookshelf-portal/bookshelf-portal/backend
+            cd ~/apps/bookshelf-portal/backend
             venv/bin/pip install pytest --quiet
-            APP_PASSWORD=$(grep '^APP_PASSWORD=' ~/apps/bookshelf-portal/bookshelf-portal/.env | cut -d= -f2-)
+            APP_PASSWORD=$(grep '^APP_PASSWORD=' ~/apps/bookshelf-portal/.env | cut -d= -f2-)
             APP_PASSWORD="$APP_PASSWORD" venv/bin/pytest tests/test_integration.py -v --tb=short
             echo "Integration tests passed"

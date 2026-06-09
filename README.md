@@ -37,7 +37,7 @@ cp backend/.env.example backend/.env
 docker compose up -d
 ```
 
-Open `http://localhost:8788` and log in with your `APP_PASSWORD`.
+Open `http://localhost:8788/portal` and log in with your `APP_PASSWORD`.
 
 ## Development
 
@@ -46,6 +46,39 @@ Open `http://localhost:8788` and log in with your `APP_PASSWORD`.
 ```
 
 Starts the backend (port 8788) and frontend dev server (port 5173) with hot reload. Default password is `family`. Set `MOCK_MODE=true` to skip live service connections.
+
+## Goodreads shelf sync
+
+`backend/goodreads_sync.py` is an optional cron script that automatically discovers books from Goodreads "to-read" shelves and dispatches downloads for any that aren't already in your Calibre library.
+
+### How it works
+
+1. Fetches all books from each configured Goodreads profile's public RSS shelf feed.
+2. Skips books already in Calibre (fuzzy title + author matching handles subtitles, series markers, and Calibre's reversed author storage format).
+3. Searches Prowlarr for each missing book, prefers epub, and dispatches the best result.
+4. Before dispatching, checks the number of active (seeding < 72 h) torrents in rTorrent against `MAM_MAX_UNSATISFIED` to avoid hitting MyAnonamouse's 150-torrent limit.
+5. Books with no Prowlarr result are retried after 14 days.
+
+### Multi-user profiles
+
+Family members can add their own Goodreads profiles directly through the portal. Go to **Admin → Goodreads Profiles** and paste in a Goodreads user ID (the `12345678-firstname` portion of the profile URL). Each profile can use a different shelf name (default: `to-read`).
+
+**Backlog control:** by default, only books added to the shelf *after* the profile is created are synced ("new additions only"). Checking **"Download all books from my Want to Read shelf"** when adding a profile enables full-backlog mode — the entire shelf is eligible for download, worked through gradually across successive cron runs subject to the MAM slot cap. A note in the UI warns that a large shelf may take a few days to fully import.
+
+Each profile card in the Admin UI shows its sync mode: **Full shelf** or **New additions from YYYY-MM-DD**, so it's always clear how a profile is configured.
+
+Deduplication is global — a book already queued or in Calibre won't be downloaded twice regardless of which profile requested it.
+
+Profiles are managed in the `goodreads_profiles` table of the history database. The first profile is auto-migrated from `GOODREADS_USER_ID` in `.env` on the initial run.
+
+### Cron setup
+
+```cron
+0 */4 * * * /path/to/backend/venv/bin/python /path/to/backend/goodreads_sync.py \
+    --env /path/to/.env >> ~/logs/goodreads_sync.log 2>&1
+```
+
+Runs every 4 hours. Pass `--dry-run` to preview what would be dispatched without actually downloading anything. Pass `--max N` to override the per-run dispatch limit for one run.
 
 ## Watcher (cron job)
 
@@ -128,6 +161,15 @@ Set `TORRENT_CLIENT=rtorrent` (default) or `TORRENT_CLIENT=qbittorrent`.
 | `BOOKSHELF_BASE_URL` | `http://localhost:8787` | Readarr/Bookshelf base URL |
 | `BOOKSHELF_API_KEY` | `changeme` | API key |
 
+### Goodreads shelf sync
+
+| Variable | Default | Description |
+|---|---|---|
+| `GOODREADS_USER_ID` | *(empty)* | Your Goodreads user ID (e.g. `12345678-firstname`). Auto-migrated to the database as the first profile on initial run. |
+| `GOODREADS_SHELF` | `to-read` | Shelf name to sync for the initial profile |
+| `GOODREADS_MAX_PER_RUN` | `3` | Maximum dispatches per cron run (MAM slot check is the hard cap) |
+| `MAM_MAX_UNSATISFIED` | `150` | Maximum allowed unsatisfied (seeding < 72 h) MAM torrents before the run is capped to zero |
+
 ### Release filter tuning
 
 These control which releases are accepted and how they are ranked. Adjust to match your indexer setup.
@@ -151,15 +193,19 @@ bookshelf-portal/
     app/
       main.py              # FastAPI routes
       settings.py          # All configuration (pydantic-settings)
+      test_page.py         # Main portal HTML (served at /portal)
+      admin_page.py        # Admin page HTML — History + Goodreads Profiles tabs
       download_client.py   # rTorrent / qBittorrent / SABnzbd dispatch
       prowlarr_client.py   # Prowlarr search + deduplication
       release_filter.py    # Accept/reject/score logic
-      history.py           # SQLite download history
-      calibre_client.py    # calibredb wrapper
+      history.py           # SQLite download history + Goodreads profile store
+      calibre_library.py   # Calibre metadata.db reader
       auth.py              # Session token logic
       models.py            # Pydantic request/response models
       bookshelf_client.py  # Optional Readarr/Bookshelf integration
-    watcher.py             # Cron script: poll → import → update history
+    goodreads_sync.py      # Cron script: Goodreads shelf → Prowlarr → download client
+    watcher.py             # Cron script: poll downloads → import → update history
+    cleanup.py             # Cron script: remove old imported torrents from rTorrent
     requirements.txt
     .env.example
   frontend/
