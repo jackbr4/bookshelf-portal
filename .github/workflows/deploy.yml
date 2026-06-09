@@ -24,8 +24,9 @@ jobs:
 
             echo "Setting up backend venv..."
             cd ~/apps/bookshelf-portal/backend
-            if ! venv/bin/python -c "import sys" >/dev/null 2>&1; then
-              echo "  Creating fresh venv (first deploy or shebangs stale after path change)..."
+            if ! venv/bin/pip --version >/dev/null 2>&1; then
+              echo "  Creating fresh venv (missing or shebangs stale after path change)..."
+              rm -rf venv
               python3 -m venv venv
               venv/bin/pip install -r requirements.txt -q
             fi
