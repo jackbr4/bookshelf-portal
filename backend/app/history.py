@@ -149,6 +149,15 @@ class HistoryDB:
             ).fetchone()
         return dict(row) if row else None
 
+    def has_download_for_hash(self, download_id: str) -> bool:
+        """True if any download record (any status) exists for this hash."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM downloads WHERE download_id=?",
+                (download_id,),
+            ).fetchone()
+        return row is not None
+
     # ------------------------------------------------------------------
     # Imports
     # ------------------------------------------------------------------
@@ -200,7 +209,7 @@ class HistoryDB:
             return False
         if row["status"] in ("queued", "in_calibre"):
             return True
-        if row["status"] == "no_release":
+        if row["status"] in ("no_release", "error"):
             last = datetime.fromisoformat(row["last_checked_at"])
             return (datetime.now(timezone.utc) - last) < timedelta(days=14)
         return False

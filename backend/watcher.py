@@ -132,6 +132,80 @@ def rt_set_category(info_hash: str, category: str):
         logger.warning("[rtorrent] relabel failed for %s: %s", info_hash[:12], exc)
 
 
+def rt_list_books_complete() -> list[tuple[str, str]]:
+    """Return (info_hash, name) for all complete rTorrent torrents with the books label."""
+    try:
+        raw = _rt_call(
+            "d.multicall2", "", "main",
+            "d.hash=", "d.name=", "d.custom1=", "d.complete=",
+        )
+        root = ET.fromstring(raw)
+        outer_data = root.find(".//params/param/value/array/data")
+        if outer_data is None:
+            return []
+        results = []
+        category = settings.rtorrent_category
+        for torrent_val in outer_data.findall("value"):
+            inner_data = torrent_val.find("array/data")
+            if inner_data is None:
+                continue
+            fields = inner_data.findall("value")
+            if len(fields) < 4:
+                continue
+            h     = (fields[0].findtext("string") or "").strip()
+            name  = (fields[1].findtext("string") or "").strip()
+            label = (fields[2].findtext("string") or "").strip()
+            complete = 0
+            for tag in ("i8", "i4", "int"):
+                el = fields[3].find(tag)
+                if el is not None:
+                    complete = int(el.text)
+                    break
+            if h and label == category and complete == 1:
+                results.append((h, name))
+        return results
+    except Exception as exc:
+        logger.warning("[watcher] rt_list_books_complete failed: %s", exc)
+        return []
+
+
+def reconcile_orphaned_torrents(db: HistoryDB):
+    """
+    Find complete rTorrent torrents with the books label that have no download
+    record in the DB. Creates a placeholder record so the next watcher pass
+    imports them into Calibre.
+
+    This catches torrents that were loaded into rTorrent (e.g. by a prior
+    dispatch attempt) but whose download record was never written because the
+    hash-diff detection failed on a duplicate load.
+    """
+    torrents = rt_list_books_complete()
+    if not torrents:
+        return
+
+    created = 0
+    for info_hash, name in torrents:
+        if db.has_download_for_hash(info_hash):
+            continue
+        title = Path(name).stem.replace("_", " ").strip()
+        db.create_download(
+            title=title,
+            author="Unknown",
+            release_title=name,
+            indexer="orphan-recovery",
+            protocol="torrent",
+            download_id=info_hash,
+        )
+        logger.warning(
+            "[watcher] orphan recovery: registered %r (hash=%s)",
+            name, info_hash[:12],
+        )
+        created += 1
+
+    if created:
+        logger.info("[watcher] orphan recovery: created %d record(s)", created)
+
+
 # ---------------------------------------------------------------------------
 # qBittorrent (sync HTTP + cookie auth)
 # ---------------------------------------------------------------------------
@@ -363,6 +437,9 @@ def main():
         library_path=settings.calibre_library_path,
         image=settings.calibre_image,
     )
+
+    if settings.torrent_client == "rtorrent":
+        reconcile_orphaned_torrents(db)
 
     pending = db.get_downloading()
     if not pending:

@@ -356,7 +356,7 @@ async def _run():
                 dispatched += 1
             except Exception as exc:
                 logger.error("Dispatch failed for %r: %s", title, exc)
-                # Don't mark seen — let it retry next run
+                db.goodreads_mark_seen(gr_id, title, author, status="error")
 
     logger.info(
         "Done — %s=%d  profiles=%d",
