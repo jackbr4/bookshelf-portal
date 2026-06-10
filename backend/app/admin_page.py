@@ -533,6 +533,8 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 <script>
   // ── Tab switching ──────────────────────────────────────────────────────────
 
+  let _profilesLoaded = false;
+
   function showTab(name) {
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === name)
@@ -663,8 +665,6 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 
 
   // ── Goodreads Profiles tab ────────────────────────────────────────────────
-
-  let _profilesLoaded = false;
 
   async function loadProfiles() {
     if (_profilesLoaded) return;
