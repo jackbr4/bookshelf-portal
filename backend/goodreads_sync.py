@@ -344,6 +344,7 @@ async def _run():
                     indexer=release.indexer,
                     protocol=release.protocol,
                     download_id=download_id,
+                    source=f"goodreads:{name}",
                 )
                 db.goodreads_mark_seen(
                     gr_id, title, author, status="queued",

@@ -41,6 +41,12 @@ class HistoryDB:
             except Exception:
                 pass  # column already exists
 
+            # Add source column to existing downloads tables that predate it
+            try:
+                conn.execute("ALTER TABLE downloads ADD COLUMN source TEXT")
+            except Exception:
+                pass  # column already exists
+
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS downloads (
                     id              TEXT PRIMARY KEY,
@@ -50,6 +56,7 @@ class HistoryDB:
                     indexer         TEXT,
                     protocol        TEXT,
                     download_id     TEXT,
+                    source          TEXT,
                     status          TEXT NOT NULL DEFAULT 'downloading',
                     created_at      TEXT NOT NULL,
                     updated_at      TEXT NOT NULL,
@@ -99,6 +106,7 @@ class HistoryDB:
         indexer: str,
         protocol: str,
         download_id: str,
+        source: Optional[str] = None,
     ) -> str:
         record_id = str(uuid.uuid4())
         now = _now()
@@ -106,10 +114,10 @@ class HistoryDB:
             conn.execute(
                 """INSERT INTO downloads
                    (id, title, author, release_title, indexer, protocol,
-                    download_id, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'downloading', ?, ?)""",
+                    download_id, source, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'downloading', ?, ?)""",
                 (record_id, title, author, release_title, indexer,
-                 protocol, download_id, now, now),
+                 protocol, download_id, source, now, now),
             )
         return record_id
 

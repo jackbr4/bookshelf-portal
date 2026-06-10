@@ -207,8 +207,9 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       color: var(--text-sec);
       white-space: nowrap;
     }
-    .chip-torrent { background: #EDE9FE; border-color: #DDD6FE; color: #5B21B6; }
-    .chip-usenet  { background: #FEF3C7; border-color: #FDE68A; color: #92400E; }
+    .chip-torrent    { background: #EDE9FE; border-color: #DDD6FE; color: #5B21B6; }
+    .chip-usenet     { background: #FEF3C7; border-color: #FDE68A; color: #92400E; }
+    .chip-goodreads  { background: #FCE7F3; border-color: #F9A8D4; color: #9D174D; }
 
     .card-right {
       display: flex;
@@ -624,6 +625,10 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         ? '<span class="chip">' + esc(item.indexer) + '</span>'
         : '';
 
+      const grChip = (item.source || '').startsWith('goodreads:')
+        ? '<span class="chip chip-goodreads">Goodreads: ' + esc(item.source.slice('goodreads:'.length)) + '</span>'
+        : '';
+
       html += '<div class="history-card ' + statusClass + '">';
 
       html += '<div class="card-left">';
@@ -637,7 +642,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
               + esc(item.release_title) + '</div>';
       }
 
-      html += '<div class="card-chips">' + protoChip + indexerChip + '</div>';
+      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + '</div>';
       html += '</div>';
 
       html += '<div class="card-right">'

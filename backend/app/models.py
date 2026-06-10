@@ -108,6 +108,7 @@ class HistoryItem(BaseModel):
     release_title: Optional[str] = None
     indexer: Optional[str] = None
     protocol: Optional[str] = None
+    source: Optional[str] = None
     status: str
     created_at: str
     updated_at: str
