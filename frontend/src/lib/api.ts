@@ -1,14 +1,29 @@
-import type { SearchResults, AuthResponse, AddResponse, BookResult, SeriesResult } from './types';
-import { mockAuth, mockSearch, mockAddBook, mockAddSeries } from '../mocks/mockApi';
+import type {
+  ReleasesResponse,
+  AuthResponse,
+  DownloadResponse,
+  HistoryItem,
+  SeedingItem,
+  GoodreadsProfile,
+  ReleaseItem,
+  MediaType,
+} from './types';
+import {
+  mockAuth,
+  mockGetReleases,
+  mockDownload,
+  mockGetHistory,
+  mockGetSeeding,
+  mockGetGoodreadsProfiles,
+  mockAddGoodreadsProfile,
+  mockDeleteGoodreadsProfile,
+} from '../mocks/mockApi';
 
 const MOCK_MODE = import.meta.env.VITE_MOCK_MODE === 'true';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     throw new Error('SESSION_EXPIRED');
-  }
-  if (res.status === 409) {
-    throw new Error('DUPLICATE');
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -24,32 +39,41 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// Map snake_case backend fields to camelCase frontend types
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapBook(b: any): BookResult {
+function mapRelease(r: any): ReleaseItem {
   return {
-    id: b.id,
-    title: b.title,
-    author: b.author,
-    year: b.year,
-    seriesName: b.series_name,
-    coverUrl: b.cover_url,
-    status: b.status,
-    foreignAuthorId: b.foreign_author_id,
-    foreignEditionId: b.foreign_edition_id,
-    language: b.language,
+    guid: r.guid,
+    title: r.title,
+    indexer: r.indexer,
+    protocol: r.protocol,
+    sizeMb: r.size_mb,
+    detectedFormat: r.detected_format,
+    seeders: r.seeders,
+    ageDays: r.age_days,
+    downloadUrl: r.download_url,
+    publishDate: r.publish_date,
+    score: r.score ?? 0,
+    rejected: r.rejected,
+    rejectReason: r.reject_reason,
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapSeries(s: any): SeriesResult {
+function mapHistoryItem(item: any): HistoryItem {
   return {
-    id: s.id,
-    title: s.title,
-    author: s.author,
-    bookCount: s.book_count,
-    coverUrl: s.cover_url,
-    status: s.status,
+    id: item.id,
+    title: item.title,
+    author: item.author,
+    downloadId: item.download_id,
+    releaseTitle: item.release_title,
+    indexer: item.indexer,
+    protocol: item.protocol,
+    source: item.source,
+    mediaType: item.media_type,
+    status: item.status,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+    error: item.error,
   };
 }
 
@@ -78,38 +102,116 @@ export async function logout(): Promise<void> {
   await fetch('/portal/logout', { method: 'POST', credentials: 'include' });
 }
 
-export async function search(query: string): Promise<SearchResults> {
-  if (MOCK_MODE) return mockSearch(query);
-  const res = await fetch(`/portal/search?q=${encodeURIComponent(query)}`, {
+export async function getReleases(title: string, author: string): Promise<ReleasesResponse> {
+  if (MOCK_MODE) return mockGetReleases(title, author);
+  const params = new URLSearchParams();
+  if (title.trim()) params.set('title', title.trim());
+  if (author.trim()) params.set('author', author.trim());
+  const res = await fetch(`/portal/releases?${params.toString()}`, {
     credentials: 'include',
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await handleResponse<any>(res);
   return {
-    books: (data.books ?? []).map(mapBook),
-    series: (data.series ?? []).map(mapSeries),
-    filteredBooks: (data.filtered_books ?? []).map(mapBook),
+    ebookAccepted: (data.ebook_accepted ?? []).map(mapRelease),
+    ebookRejected: (data.ebook_rejected ?? []).map(mapRelease),
+    audiobookAccepted: (data.audiobook_accepted ?? []).map(mapRelease),
+    audiobookRejected: (data.audiobook_rejected ?? []).map(mapRelease),
+    calibreTitle: data.calibre_title,
+    audiobooksTitle: data.audiobooks_title,
   };
 }
 
-export async function addBook(bookId: string, title?: string, author?: string, foreignAuthorId?: string | null, foreignEditionId?: string | null): Promise<AddResponse> {
-  if (MOCK_MODE) return mockAddBook(bookId);
-  const res = await fetch('/portal/request/book', {
+export async function downloadRelease(args: {
+  title: string;
+  author: string;
+  releaseTitle: string;
+  indexer: string;
+  protocol: string;
+  downloadUrl: string;
+  mediaType: MediaType;
+}): Promise<DownloadResponse> {
+  if (MOCK_MODE) return mockDownload(args);
+  const res = await fetch('/portal/download', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ book_id: bookId, title, author, foreign_author_id: foreignAuthorId, foreign_edition_id: foreignEditionId }),
+    body: JSON.stringify({
+      title: args.title,
+      author: args.author,
+      release_title: args.releaseTitle,
+      indexer: args.indexer,
+      protocol: args.protocol,
+      download_url: args.downloadUrl,
+      media_type: args.mediaType,
+    }),
   });
-  return handleResponse<AddResponse>(res);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return {
+    ok: data.ok,
+    recordId: data.record_id,
+    downloadId: data.download_id,
+    message: data.message,
+  };
 }
 
-export async function addSeries(seriesId: string): Promise<AddResponse> {
-  if (MOCK_MODE) return mockAddSeries(seriesId);
-  const res = await fetch('/portal/request/series', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ series_id: seriesId }),
-  });
-  return handleResponse<AddResponse>(res);
+export async function getHistory(limit = 500): Promise<HistoryItem[]> {
+  if (MOCK_MODE) return mockGetHistory();
+  const res = await fetch(`/portal/history?limit=${limit}`, { credentials: 'include' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return (data.items ?? []).map(mapHistoryItem);
+}
+
+export async function getSeeding(): Promise<SeedingItem[]> {
+  if (MOCK_MODE) return mockGetSeeding();
+  const res = await fetch('/portal/seeding', { credentials: 'include' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return (data.seeding ?? []).map((s: { hash: string; finished_at?: number }) => ({
+    hash: s.hash,
+    finishedAt: s.finished_at,
+  }));
+}
+
+export async function getGoodreadsProfiles(): Promise<GoodreadsProfile[]> {
+  if (MOCK_MODE) return mockGetGoodreadsProfiles();
+  const res = await fetch('/portal/goodreads-profiles', { credentials: 'include' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return data.profiles ?? [];
+}
+
+export async function addGoodreadsProfile(body: {
+  name: string;
+  user_id: string;
+  shelf: string;
+  sync_from?: string | null;
+}): Promise<void> {
+  if (MOCK_MODE) {
+    await mockAddGoodreadsProfile(body);
+    return;
+  }
+  await handleResponse(
+    await fetch('/portal/goodreads-profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+  );
+}
+
+export async function deleteGoodreadsProfile(profileId: string): Promise<void> {
+  if (MOCK_MODE) {
+    await mockDeleteGoodreadsProfile(profileId);
+    return;
+  }
+  await handleResponse(
+    await fetch(`/portal/goodreads-profiles/${profileId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+  );
 }

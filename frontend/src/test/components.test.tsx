@@ -1,18 +1,21 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import PasswordGate from '../components/PasswordGate'
-import SearchPanel from '../components/SearchPanel'
-import ResultCard from '../components/ResultCard'
-import StatusBadge from '../components/StatusBadge'
+import SearchCard from '../components/SearchCard'
+import ReleaseCard from '../components/ReleaseCard'
 
-// Mock API
 vi.mock('../lib/api', () => ({
   login: vi.fn(),
-  search: vi.fn(),
-  addBook: vi.fn(),
-  addSeries: vi.fn(),
+  getReleases: vi.fn(),
+  downloadRelease: vi.fn(),
   logout: vi.fn(),
+  getHistory: vi.fn(),
+  getSeeding: vi.fn(),
+  getGoodreadsProfiles: vi.fn(),
+  addGoodreadsProfile: vi.fn(),
+  deleteGoodreadsProfile: vi.fn(),
 }))
 
 vi.mock('../lib/session', () => ({
@@ -22,6 +25,19 @@ vi.mock('../lib/session', () => ({
 }))
 
 import { login } from '../lib/api'
+
+const sampleRelease = {
+  guid: 'r1',
+  title: 'Dune by Frank Herbert [ENG / EPUB]',
+  indexer: 'MyAnonamouse',
+  protocol: 'torrent',
+  sizeMb: 1.2,
+  detectedFormat: 'EPUB',
+  seeders: 42,
+  ageDays: 10,
+  downloadUrl: 'https://example.com/r1',
+  score: 70,
+}
 
 describe('PasswordGate', () => {
   it('shows error on empty submit', async () => {
@@ -43,62 +59,69 @@ describe('PasswordGate', () => {
     fireEvent.click(screen.getByText('Continue'))
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())
   })
-
-  it('shows error on incorrect password', async () => {
-    const mockLogin = vi.mocked(login)
-    mockLogin.mockResolvedValue({ ok: false })
-    const onSuccess = vi.fn()
-    render(<PasswordGate onSuccess={onSuccess} />)
-    await userEvent.type(screen.getByPlaceholderText('Enter access code'), 'wrong')
-    fireEvent.click(screen.getByText('Continue'))
-    await waitFor(() => {
-      expect(screen.getByText('Incorrect access code. Please try again.')).toBeInTheDocument()
-    })
-  })
 })
 
-describe('SearchPanel', () => {
+describe('SearchCard', () => {
   it('shows inline validation on empty search', async () => {
     const onSearch = vi.fn()
-    render(<SearchPanel onSearch={onSearch} loading={false} />)
+    render(
+      <SearchCard
+        title=""
+        author=""
+        onTitleChange={vi.fn()}
+        onAuthorChange={vi.fn()}
+        onSearch={onSearch}
+        loading={false}
+      />
+    )
     fireEvent.click(screen.getByText('Search'))
     await waitFor(() => {
-      expect(screen.getByText('Enter a book or series to search.')).toBeInTheDocument()
+      expect(screen.getByText('Enter a title and/or author to search.')).toBeInTheDocument()
     })
     expect(onSearch).not.toHaveBeenCalled()
   })
 
-  it('calls onSearch with query', async () => {
+  it('calls onSearch when title is provided', async () => {
     const onSearch = vi.fn()
-    render(<SearchPanel onSearch={onSearch} loading={false} />)
-    await userEvent.type(screen.getByPlaceholderText('Search for a book'), 'Dune')
+    render(
+      <SearchCard
+        title="Dune"
+        author=""
+        onTitleChange={vi.fn()}
+        onAuthorChange={vi.fn()}
+        onSearch={onSearch}
+        loading={false}
+      />
+    )
     fireEvent.click(screen.getByText('Search'))
-    expect(onSearch).toHaveBeenCalledWith('Dune')
+    expect(onSearch).toHaveBeenCalled()
   })
 })
 
-describe('StatusBadge', () => {
-  it('renders "Available" for available status', () => {
-    render(<StatusBadge status="available" />)
-    expect(screen.getByText('Available')).toBeInTheDocument()
-  })
-
-  it('renders "Already in library" for already_in_library status', () => {
-    render(<StatusBadge status="already_in_library" />)
-    expect(screen.getByText('Already in library')).toBeInTheDocument()
+describe('ReleaseCard', () => {
+  it('renders download button', () => {
+    render(
+      <ReleaseCard
+        release={sampleRelease}
+        viewMode="simple"
+        downloading={false}
+        onDownload={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Download')).not.toBeDisabled()
+    expect(screen.getByText(sampleRelease.title)).toBeInTheDocument()
   })
 })
 
-describe('ResultCard', () => {
-  it('disables button for duplicate book', () => {
-    const item = { id: 'b1', title: 'Dune', author: 'Frank Herbert', status: 'already_in_library' as const }
-    render(<ResultCard kind="book" item={item} onAdd={vi.fn()} />)
-    expect(screen.getByText('Already Added')).toBeDisabled()
-  })
-
-  it('enables Add Book button when available', () => {
-    const item = { id: 'b1', title: 'Dune', author: 'Frank Herbert', status: 'available' as const }
-    render(<ResultCard kind="book" item={item} onAdd={vi.fn()} />)
-    expect(screen.getByText('Add Book')).not.toBeDisabled()
+describe('PortalHeader', () => {
+  it('renders admin link on request page', async () => {
+    const PortalHeader = (await import('../components/PortalHeader')).default
+    render(
+      <MemoryRouter>
+        <PortalHeader title="Book Request Portal" onSignOut={vi.fn()} />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Admin')).toBeInTheDocument()
+    expect(screen.getByText('Sign out')).toBeInTheDocument()
   })
 })

@@ -13,7 +13,7 @@ export default function PasswordRoute() {
   }, [navigate])
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center p-3" style={{ background: 'var(--color-page-bg)' }}>
+    <div className="portal-gate-wrap">
       <PasswordGate onSuccess={() => navigate('/request', { replace: true })} />
     </div>
   )

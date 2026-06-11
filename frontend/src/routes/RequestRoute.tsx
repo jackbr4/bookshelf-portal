@@ -1,38 +1,23 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import SearchPanel from '../components/SearchPanel'
-import ResultsSection from '../components/ResultsSection'
+import PortalHeader from '../components/PortalHeader'
+import SearchCard from '../components/SearchCard'
+import ReleaseResults from '../components/ReleaseResults'
 import PortalToast from '../components/PortalToast'
-import PortalButton from '../components/PortalButton'
-import { search, addBook, addSeries, logout } from '../lib/api'
+import { getReleases, downloadRelease, logout } from '../lib/api'
 import { clearSession } from '../lib/session'
-import type { SearchResults, ToastState, ItemStatus, BookResult, SeriesResult } from '../lib/types'
-
-const LANG_ORDER = ['en', 'pl', 'nl'] as const
-const LANG_LABELS: Record<string, string> = { en: 'English', pl: 'Polish', nl: 'Dutch' }
-
-function groupBooksByLanguage(books: BookResult[]): Record<string, BookResult[]> {
-  const groups: Record<string, BookResult[]> = { en: [], pl: [], nl: [] }
-  for (const book of books) {
-    const lang = book.language ?? 'en'
-    const key = (LANG_ORDER as readonly string[]).includes(lang) ? lang : 'en'
-    groups[key].push(book)
-  }
-  return groups
-}
+import type { ReleasesResponse, ToastState, ReleaseItem, MediaType } from '../lib/types'
 
 export default function RequestRoute() {
   const navigate = useNavigate()
-  const [results, setResults] = useState<SearchResults | null>(null)
+  const [title, setTitle] = useState('')
+  const [author, setAuthor] = useState('')
+  const [results, setResults] = useState<ReleasesResponse | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
-  const [lastQuery, setLastQuery] = useState('')
-
-  const langGroups = useMemo(
-    () => (results ? groupBooksByLanguage(results.books) : null),
-    [results]
-  )
+  const [lastTitle, setLastTitle] = useState('')
+  const [lastAuthor, setLastAuthor] = useState('')
 
   function showToast(t: ToastState) {
     setToast(t)
@@ -44,13 +29,15 @@ export default function RequestRoute() {
     navigate('/', { replace: true })
   }
 
-  const handleSearch = useCallback(async (query: string) => {
+  const handleSearch = useCallback(async () => {
+    if (!title.trim() && !author.trim()) return
     setSearching(true)
     setSearchError(null)
     setResults(null)
-    setLastQuery(query)
+    setLastTitle(title.trim())
+    setLastAuthor(author.trim())
     try {
-      const data = await search(query)
+      const data = await getReleases(title.trim(), author.trim())
       setResults(data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -58,108 +45,41 @@ export default function RequestRoute() {
         handleSessionExpired()
         return
       }
-      setSearchError(msg && msg !== 'SESSION_EXPIRED' ? msg : 'Something went wrong. Please try again.')
+      setSearchError(msg || 'Something went wrong. Please try again.')
     } finally {
       setSearching(false)
     }
-  }, [])
+  }, [title, author, navigate])
 
-  const handleAddBook = useCallback(async (item: BookResult | SeriesResult) => {
-    const book = item as BookResult
+  const handleDownload = useCallback(async (release: ReleaseItem, mediaType: MediaType) => {
     try {
-      await addBook(book.id, book.title, book.author, book.foreignAuthorId, book.foreignEditionId)
-      setResults(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          books: prev.books.map(b =>
-            b.id === book.id ? { ...b, status: 'already_monitored' as ItemStatus } : b
-          ),
-        }
+      const res = await downloadRelease({
+        title: lastTitle || title.trim(),
+        author: lastAuthor || author.trim(),
+        releaseTitle: release.title,
+        indexer: release.indexer,
+        protocol: release.protocol,
+        downloadUrl: release.downloadUrl,
+        mediaType,
       })
       showToast({
         kind: 'success',
-        message: 'Book added successfully',
-        subMessage: 'Bookshelf will now monitor and search for this title. It may take up to 15 minutes before this book is available in Calibre.',
+        message: 'Download started',
+        subMessage: res.message,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      if (msg === 'SESSION_EXPIRED') { handleSessionExpired(); return }
-      if (msg === 'DUPLICATE') {
-        showToast({
-          kind: 'info',
-          message: 'This book is already in the library or being monitored.',
-          subMessage: 'Please check to see if the book is already in Calibre. If it was recently added it could take up to 15 minutes before it is available in Calibre.',
-        })
-      } else if (msg === 'AUTHOR_NOT_FOUND') {
-        showToast({
-          kind: 'error',
-          message: 'Could not find this book.',
-          subMessage: 'Please check to see if the book title and author name are correct.',
-          actionLabel: 'Retry',
-          onAction: () => handleAddBook(item),
-        })
-      } else if (msg === 'BOOKSHELF_ERROR') {
-        showToast({
-          kind: 'error',
-          message: 'This book could not be added.',
-          subMessage: 'Please try again in a few minutes.',
-          actionLabel: 'Retry',
-          onAction: () => handleAddBook(item),
-        })
-      } else if (msg === 'CONNECTION_ERROR') {
-        showToast({
-          kind: 'error',
-          message: 'Cannot reach the server.',
-          subMessage: 'Please try again in a few minutes or complain to Brendan',
-          actionLabel: 'Retry',
-          onAction: () => handleAddBook(item),
-        })
-      } else {
-        showToast({
-          kind: 'error',
-          message: 'Something went wrong while adding this book.',
-          subMessage: 'Try again later or complain to Brendan',
-          actionLabel: 'Retry',
-          onAction: () => handleAddBook(item),
-        })
+      if (msg === 'SESSION_EXPIRED') {
+        handleSessionExpired()
+        return
       }
-    }
-  }, [])
-
-  const handleAddSeries = useCallback(async (item: BookResult | SeriesResult) => {
-    const seriesId = item.id
-    try {
-      await addSeries(seriesId)
-      setResults(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          series: prev.series.map(s =>
-            s.id === seriesId ? { ...s, status: 'already_monitored' as ItemStatus } : s
-          ),
-        }
-      })
       showToast({
-        kind: 'success',
-        message: 'Series added successfully',
-        subMessage: 'Bookshelf will now monitor the books in this series.',
+        kind: 'error',
+        message: 'Download failed',
+        subMessage: msg || 'Please try again in a few minutes.',
       })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg === 'SESSION_EXPIRED') { handleSessionExpired(); return }
-      if (msg === 'DUPLICATE') {
-        showToast({ kind: 'info', message: 'This series is already being monitored.' })
-      } else {
-        showToast({
-          kind: 'error',
-          message: 'Something went wrong while adding this series.',
-          actionLabel: 'Retry',
-          onAction: () => handleAddSeries(item),
-        })
-      }
     }
-  }, [])
+  }, [lastTitle, lastAuthor, title, author, navigate])
 
   async function handleLogout() {
     await logout()
@@ -167,72 +87,29 @@ export default function RequestRoute() {
     navigate('/', { replace: true })
   }
 
-  const hasBooks = (results?.books.length ?? 0) > 0
-  const hasSeries = (results?.series.length ?? 0) > 0
-  const noResults = results !== null && !hasBooks && !hasSeries
-
   return (
-    <div className="min-vh-100" style={{ background: 'var(--color-page-bg)' }}>
-      {/* Header */}
-      <header className="bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
-        <div>
-          <h1 className="h5 mb-0 fw-semibold">Book Request Portal</h1>
-          <p className="text-muted mb-0" style={{ fontSize: '13px' }}>Request a book for download</p>
-        </div>
-        <PortalButton variant="outline-secondary" size="sm" onClick={handleLogout}>
-          Sign out
-        </PortalButton>
-      </header>
+    <div className="portal-page">
+      <PortalHeader title="Book Request Portal" onSignOut={handleLogout} />
 
-      <main className="container py-5">
-        <div className="search-panel">
-          <SearchPanel onSearch={handleSearch} loading={searching} />
+      <main className="portal-main">
+        <SearchCard
+          title={title}
+          author={author}
+          onTitleChange={setTitle}
+          onAuthorChange={setAuthor}
+          onSearch={handleSearch}
+          loading={searching}
+          error={searchError ?? undefined}
+        />
 
-          {searchError && (
-            <div className="alert alert-danger mt-3" role="alert">
-              {searchError}
-            </div>
-          )}
-        </div>
-
-        {/* Results */}
-        {results !== null && (
-          <div className="mt-4">
-            {noResults && !searching && (
-              <div className="text-center py-5 text-muted">
-                <div style={{ fontSize: '2rem' }}>📚</div>
-                <p className="mt-2">No matching books or series found for <strong>"{lastQuery}"</strong></p>
-              </div>
-            )}
-
-            {hasBooks && langGroups && (
-              <div className="d-flex flex-column gap-4">
-                {LANG_ORDER.map(lang => {
-                  const group = langGroups[lang]
-                  if (!group?.length) return null
-                  return (
-                    <ResultsSection
-                      key={lang}
-                      heading={LANG_LABELS[lang]}
-                      kind="book"
-                      items={group}
-                      onAdd={handleAddBook}
-                    />
-                  )
-                })}
-              </div>
-            )}
-
-            {hasSeries && (
-              <div className={hasBooks ? 'mt-4' : ''}>
-                <ResultsSection
-                  heading="Series"
-                  kind="series"
-                  items={results.series}
-                  onAdd={handleAddSeries}
-                />
-              </div>
-            )}
+        {results && (
+          <div style={{ marginTop: 28 }}>
+            <ReleaseResults
+              results={results}
+              searchTitle={lastTitle}
+              searchAuthor={lastAuthor}
+              onDownload={handleDownload}
+            />
           </div>
         )}
       </main>

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PasswordRoute from './routes/PasswordRoute'
 import RequestRoute from './routes/RequestRoute'
+import AdminRoute from './routes/AdminRoute'
 import { isSessionValid } from './lib/session'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,14 @@ export default function App() {
           element={
             <RequireAuth>
               <RequestRoute />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <RequireAuth>
+              <AdminRoute />
             </RequireAuth>
           }
         />

@@ -1,24 +1,144 @@
-import type { SearchResults, AuthResponse, AddResponse, BookResult, SeriesResult } from '../lib/types';
+import type {
+  ReleasesResponse,
+  AuthResponse,
+  DownloadResponse,
+  HistoryItem,
+  SeedingItem,
+  GoodreadsProfile,
+  ReleaseItem,
+  MediaType,
+} from '../lib/types';
 
 const MOCK_PASSWORD = 'family';
 
-const MOCK_BOOKS: BookResult[] = [
-  { id: 'book_1', title: 'Dune', author: 'Frank Herbert', year: 1965, seriesName: 'Dune', status: 'available', language: 'en' },
-  { id: 'book_2', title: 'Dune Messiah', author: 'Frank Herbert', year: 1969, seriesName: 'Dune', status: 'already_in_library', language: 'en' },
-  { id: 'book_3', title: 'The Way of Kings', author: 'Brandon Sanderson', year: 2010, seriesName: 'The Stormlight Archive', status: 'available', language: 'en' },
-  { id: 'book_4', title: 'Words of Radiance', author: 'Brandon Sanderson', year: 2014, seriesName: 'The Stormlight Archive', status: 'already_monitored', language: 'en' },
-  { id: 'book_5', title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, status: 'available', language: 'en' },
-  { id: 'book_6', title: 'The Martian', author: 'Andy Weir', year: 2011, status: 'already_in_library', language: 'en' },
-  { id: 'book_7', title: 'Wiedźmin: Ostatnie życzenie', author: 'Andrzej Sapkowski', year: 1993, seriesName: 'Wiedźmin', status: 'available', language: 'pl' },
-  { id: 'book_8', title: 'Krew elfów', author: 'Andrzej Sapkowski', year: 1994, seriesName: 'Wiedźmin', status: 'available', language: 'pl' },
-  { id: 'book_9', title: 'De Ontdekking van de Hemel', author: 'Harry Mulisch', year: 1992, status: 'available', language: 'nl' },
+const MOCK_EBOOK_RELEASES: ReleaseItem[] = [
+  {
+    guid: 'eb1',
+    title: 'NIV Holy Bible: New International Version by Zondervan [ENG / EPUB]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    sizeMb: 10.7,
+    detectedFormat: 'EPUB',
+    seeders: 88,
+    ageDays: 845,
+    downloadUrl: 'https://example.com/eb1',
+    score: 69,
+  },
+  {
+    guid: 'eb2',
+    title: 'The Holy Bible: King James version by American Bible Society [ENG / EPUB]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    sizeMb: 1.4,
+    detectedFormat: 'EPUB',
+    seeders: 242,
+    ageDays: 5043,
+    downloadUrl: 'https://example.com/eb2',
+    score: 65,
+  },
+  {
+    guid: 'eb3',
+    title: 'Holy Bible: New International Version, NIV, Open Bible by Thomas Nelson Inc [ENG / EPUB]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    sizeMb: 18.3,
+    detectedFormat: 'EPUB',
+    seeders: 34,
+    ageDays: 844,
+    downloadUrl: 'https://example.com/eb3',
+    score: 62,
+  },
 ];
 
-const MOCK_SERIES: SeriesResult[] = [
-  { id: 'series_1', title: 'Dune Chronicles', author: 'Frank Herbert', bookCount: 6, status: 'already_monitored' },
-  { id: 'series_2', title: 'The Stormlight Archive', author: 'Brandon Sanderson', bookCount: 5, status: 'available' },
-  { id: 'series_3', title: 'The Expanse', author: 'James S.A. Corey', bookCount: 9, status: 'available' },
-  { id: 'series_4', title: 'Mistborn', author: 'Brandon Sanderson', bookCount: 7, status: 'already_monitored' },
+const MOCK_AUDIO_RELEASES: ReleaseItem[] = [
+  {
+    guid: 'ab1',
+    title: 'The Holy Bible in Audio - King James Version by Christianaudio com [ENG / M4B]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    sizeMb: 1954.6,
+    detectedFormat: 'M4B',
+    seeders: 19,
+    ageDays: 2231,
+    downloadUrl: 'https://example.com/ab1',
+    score: 58,
+  },
+  {
+    guid: 'ab2',
+    title: 'The Holy Bible: King James Version by King James Bible [ENG / MP3]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    sizeMb: 1228.8,
+    detectedFormat: 'MP3',
+    seeders: 51,
+    ageDays: 396,
+    downloadUrl: 'https://example.com/ab2',
+    score: 55,
+  },
+];
+
+const MOCK_HISTORY: HistoryItem[] = [
+  {
+    id: 'h1',
+    title: 'Moby Dick',
+    author: 'Herman Melville',
+    releaseTitle: 'Moby Dick by Herman Melville [ENG / M4B]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    mediaType: 'audiobook',
+    status: 'imported',
+    downloadId: 'ABC123',
+    createdAt: '2026-06-11T10:30:00Z',
+    updatedAt: '2026-06-11T11:00:00Z',
+  },
+  {
+    id: 'h2',
+    title: 'the right stuff',
+    author: 'Tom Wolfe',
+    releaseTitle: 'The Right Stuff by Tom Wolfe [ENG / EPUB]',
+    indexer: 'MyAnonamouse',
+    protocol: 'torrent',
+    mediaType: 'ebook',
+    status: 'imported',
+    downloadId: 'DEF456',
+    createdAt: '2026-06-11T04:52:00Z',
+    updatedAt: '2026-06-11T05:30:00Z',
+  },
+  {
+    id: 'h3',
+    title: 'Same bed different dreams',
+    author: 'Ed Park',
+    releaseTitle: 'Ed Park - Same Bed Different Dreams (epub)',
+    indexer: 'NZBgeek',
+    protocol: 'usenet',
+    source: 'SABnzbd',
+    mediaType: 'ebook',
+    status: 'error',
+    error: 'SABnzbd: Aborted, cannot be completed - missing articles',
+    createdAt: '2026-06-04T09:25:00Z',
+    updatedAt: '2026-06-04T10:00:00Z',
+  },
+];
+
+let mockProfiles: GoodreadsProfile[] = [
+  {
+    id: 'p1',
+    name: 'Brendan',
+    user_id: '1398435-brendan',
+    shelf: 'to-read',
+    sync_from: null,
+    active: 1,
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'p2',
+    name: 'Ewa',
+    user_id: '96370075-ewa-jackson',
+    shelf: 'to-read',
+    sync_from: '2026-06-09',
+    active: 1,
+    created_at: '2026-06-09T00:00:00Z',
+  },
 ];
 
 function delay(ms = 600): Promise<void> {
@@ -37,24 +157,78 @@ export async function mockAuth(accessCode: string): Promise<AuthResponse> {
   return { ok: false };
 }
 
-export async function mockSearch(query: string): Promise<SearchResults> {
-  await delay(800);
-  const q = query.toLowerCase();
-  const books = MOCK_BOOKS.filter(b =>
-    b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-  );
-  const series = MOCK_SERIES.filter(s =>
-    s.title.toLowerCase().includes(q) || s.author.toLowerCase().includes(q)
-  );
-  return { books, series, filteredBooks: [] };
+export async function mockGetReleases(title: string, author: string): Promise<ReleasesResponse> {
+  await delay(900);
+  const q = `${title} ${author}`.toLowerCase();
+  const isBible = q.includes('bible') || q.includes('holy');
+  return {
+    ebookAccepted: isBible ? MOCK_EBOOK_RELEASES : MOCK_EBOOK_RELEASES.slice(0, 1),
+    ebookRejected: isBible ? [{ ...MOCK_EBOOK_RELEASES[0], guid: 'rej1', rejected: true, rejectReason: 'Too small' }] : [],
+    audiobookAccepted: isBible ? MOCK_AUDIO_RELEASES : [],
+    audiobookRejected: isBible ? [] : [],
+    calibreTitle: null,
+    audiobooksTitle: null,
+  };
 }
 
-export async function mockAddBook(_bookId: string): Promise<AddResponse> {
+export async function mockDownload(_args: {
+  title: string;
+  author: string;
+  releaseTitle: string;
+  indexer: string;
+  protocol: string;
+  downloadUrl: string;
+  mediaType: MediaType;
+}): Promise<DownloadResponse> {
   await delay(500);
-  return { ok: true, message: 'Book added successfully' };
+  return {
+    ok: true,
+    recordId: 'mock-record',
+    downloadId: 'MOCKHASH',
+    message: 'Sent to download client',
+  };
 }
 
-export async function mockAddSeries(_seriesId: string): Promise<AddResponse> {
-  await delay(500);
-  return { ok: true, message: 'Series added successfully' };
+export async function mockGetHistory(): Promise<HistoryItem[]> {
+  await delay(400);
+  return MOCK_HISTORY;
+}
+
+export async function mockGetSeeding(): Promise<SeedingItem[]> {
+  await delay(200);
+  return [
+    { hash: 'ABC123', finishedAt: Math.floor(Date.now() / 1000) - 3600 },
+    { hash: 'DEF456', finishedAt: Math.floor(Date.now() / 1000) - 7200 },
+  ];
+}
+
+export async function mockGetGoodreadsProfiles(): Promise<GoodreadsProfile[]> {
+  await delay(300);
+  return [...mockProfiles];
+}
+
+export async function mockAddGoodreadsProfile(body: {
+  name: string;
+  user_id: string;
+  shelf: string;
+  sync_from?: string | null;
+}): Promise<void> {
+  await delay(300);
+  mockProfiles = [
+    ...mockProfiles,
+    {
+      id: `p${mockProfiles.length + 1}`,
+      name: body.name,
+      user_id: body.user_id,
+      shelf: body.shelf,
+      sync_from: body.sync_from ?? null,
+      active: 1,
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
+export async function mockDeleteGoodreadsProfile(profileId: string): Promise<void> {
+  await delay(200);
+  mockProfiles = mockProfiles.filter(p => p.id !== profileId);
 }

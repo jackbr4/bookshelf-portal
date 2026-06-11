@@ -1,31 +1,69 @@
-export type ItemStatus = 'available' | 'already_in_library' | 'already_monitored';
+export type MediaType = 'ebook' | 'audiobook';
+export type ViewMode = 'simple' | 'detailed';
+export type MediaFilter = 'all' | 'ebook' | 'audiobook';
+export type StatFilter = 'all' | 'imported' | 'active' | 'errors' | 'seeding';
 
-export interface BookResult {
+export interface ReleaseItem {
+  guid: string;
+  title: string;
+  indexer: string;
+  protocol: string;
+  sizeMb: number;
+  detectedFormat?: string | null;
+  seeders?: number | null;
+  ageDays?: number | null;
+  downloadUrl: string;
+  publishDate?: string | null;
+  score: number;
+  rejected?: boolean;
+  rejectReason?: string | null;
+}
+
+export interface ReleasesResponse {
+  ebookAccepted: ReleaseItem[];
+  ebookRejected: ReleaseItem[];
+  audiobookAccepted: ReleaseItem[];
+  audiobookRejected: ReleaseItem[];
+  calibreTitle?: string | null;
+  audiobooksTitle?: string | null;
+}
+
+export interface DownloadResponse {
+  ok: boolean;
+  recordId: string;
+  downloadId: string;
+  message: string;
+}
+
+export interface HistoryItem {
   id: string;
   title: string;
   author: string;
-  year?: number;
-  seriesName?: string;
-  coverUrl?: string | null;
-  status: ItemStatus;
-  foreignAuthorId?: string | null;
-  foreignEditionId?: string | null;
-  language?: string | null;
+  downloadId?: string | null;
+  releaseTitle?: string | null;
+  indexer?: string | null;
+  protocol?: string | null;
+  source?: string | null;
+  mediaType?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  error?: string | null;
 }
 
-export interface SeriesResult {
+export interface SeedingItem {
+  hash: string;
+  finishedAt?: number;
+}
+
+export interface GoodreadsProfile {
   id: string;
-  title: string;
-  author: string;
-  bookCount?: number;
-  coverUrl?: string | null;
-  status: ItemStatus;
-}
-
-export interface SearchResults {
-  books: BookResult[];
-  series: SeriesResult[];
-  filteredBooks: BookResult[];
+  name: string;
+  user_id: string;
+  shelf: string;
+  sync_from?: string | null;
+  active?: number;
+  created_at?: string;
 }
 
 export interface ToastState {
@@ -40,9 +78,4 @@ export interface AuthResponse {
   ok: boolean;
   sessionToken?: string;
   expiresAt?: string;
-}
-
-export interface AddResponse {
-  ok: boolean;
-  message: string;
 }
