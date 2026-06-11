@@ -210,6 +210,34 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .chip-torrent    { background: #EDE9FE; border-color: #DDD6FE; color: #5B21B6; }
     .chip-usenet     { background: #FEF3C7; border-color: #FDE68A; color: #92400E; }
     .chip-goodreads  { background: #FCE7F3; border-color: #F9A8D4; color: #9D174D; }
+    .chip-ebook      { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
+    .chip-audiobook  { background: #DBEAFE; border-color: #BFDBFE; color: #1E40AF; }
+
+    /* ── History media filter ── */
+    .history-filter {
+      display: flex;
+      gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+      width: fit-content;
+      margin-bottom: 1rem;
+    }
+    .filter-btn {
+      background: none;
+      border: none;
+      border-radius: calc(var(--radius-sm) - 2px);
+      padding: 0.3rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      color: var(--muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .filter-btn.active { background: var(--primary); color: #fff; }
+    .filter-btn:hover:not(.active) { color: var(--text); }
 
     .card-right {
       display: flex;
@@ -487,6 +515,11 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         <div class="stat-label">Errors</div>
       </div>
     </div>
+    <div id="history-filter-bar" class="history-filter" style="display:none">
+      <button class="filter-btn active" data-filter="all"       onclick="setHistoryFilter('all')">All</button>
+      <button class="filter-btn"        data-filter="ebook"     onclick="setHistoryFilter('ebook')">E-book</button>
+      <button class="filter-btn"        data-filter="audiobook" onclick="setHistoryFilter('audiobook')">Audio book</button>
+    </div>
     <div id="history-section"></div>
   </div>
 
@@ -576,39 +609,66 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 
   // ── History tab ────────────────────────────────────────────────────────────
 
+  let _allHistoryItems = [];
+  let _historyFilter   = 'all';
+
   async function load() {
     try {
       const resp = await fetch('/portal/history', { credentials: 'include' });
       if (resp.status === 401) { handle401(); return; }
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
-      renderHistory(data.items || []);
+      _allHistoryItems = data.items || [];
+      renderStats(_allHistoryItems);
+      document.getElementById('history-filter-bar').style.display = _allHistoryItems.length ? '' : 'none';
+      applyHistoryFilter();
     } catch (e) {
       document.getElementById('history-section').innerHTML =
         '<div class="empty-state"><p style="color:var(--danger)">' + esc(e.message) + '</p></div>';
     }
   }
 
-  function renderHistory(items) {
-    const total    = items.length;
-    const imported = items.filter(i => i.status === 'imported').length;
-    const active   = items.filter(i => i.status === 'downloading' || i.status === 'importing').length;
-    const errors   = items.filter(i => i.status === 'error').length;
+  function renderStats(items) {
+    document.getElementById('stat-total').textContent    = items.length;
+    document.getElementById('stat-imported').textContent = items.filter(i => i.status === 'imported').length;
+    document.getElementById('stat-active').textContent   = items.filter(i => i.status === 'downloading' || i.status === 'importing').length;
+    document.getElementById('stat-errors').textContent   = items.filter(i => i.status === 'error').length;
+  }
 
-    document.getElementById('stat-total').textContent    = total;
-    document.getElementById('stat-imported').textContent = imported;
-    document.getElementById('stat-active').textContent   = active;
-    document.getElementById('stat-errors').textContent   = errors;
+  function setHistoryFilter(f) {
+    _historyFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.filter === f)
+    );
+    applyHistoryFilter();
+  }
 
+  function applyHistoryFilter() {
+    let items = _allHistoryItems;
+    if (_historyFilter === 'ebook') {
+      items = items.filter(i => i.media_type === 'ebook' || !i.media_type);
+    } else if (_historyFilter === 'audiobook') {
+      items = items.filter(i => i.media_type === 'audiobook');
+    }
+    renderHistoryList(items);
+  }
+
+  function renderHistoryList(items) {
     const section = document.getElementById('history-section');
+    const count = items.length;
 
-    if (!items.length) {
+    if (!count) {
+      const emptyMsg = _historyFilter === 'audiobook'
+        ? 'No audio book downloads yet.'
+        : _historyFilter === 'ebook'
+          ? 'No e-book downloads yet.'
+          : 'No downloads recorded yet.';
       section.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>'
-        + '<p>No downloads recorded yet.</p></div>';
+        + '<p>' + emptyMsg + '</p></div>';
       return;
     }
 
-    let html = '<div class="section-heading">' + total + ' download' + (total !== 1 ? 's' : '') + '</div>';
+    let html = '<div class="section-heading">' + count + ' download' + (count !== 1 ? 's' : '') + '</div>';
     html += '<div class="history-list">';
 
     items.forEach(item => {
@@ -631,6 +691,13 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         ? '<span class="chip chip-goodreads">Goodreads: ' + esc(item.source.slice('goodreads:'.length)) + '</span>'
         : '';
 
+      const mt = item.media_type;
+      const mediaChip = mt === 'ebook'
+        ? '<span class="chip chip-ebook">e-book</span>'
+        : mt === 'audiobook'
+          ? '<span class="chip chip-audiobook">audio book</span>'
+          : '';
+
       html += '<div class="history-card ' + statusClass + '">';
 
       html += '<div class="card-left">';
@@ -644,7 +711,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
               + esc(item.release_title) + '</div>';
       }
 
-      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + '</div>';
+      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + mediaChip + '</div>';
       html += '</div>';
 
       html += '<div class="card-right">'

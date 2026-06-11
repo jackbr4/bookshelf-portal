@@ -2,8 +2,11 @@ version: '3.8'
 services:
   bookshelf-portal:
     build: .
-    ports:
-      - "${PORT:-8788}:8788"
+    network_mode: host
     env_file:
       - .env
     restart: unless-stopped
+    volumes:
+      - /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db
+      - /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro
+      - /home/jackbr4/files/audiobooks:/home/jackbr4/files/audiobooks
