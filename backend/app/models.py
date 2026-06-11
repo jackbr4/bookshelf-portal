@@ -85,6 +85,8 @@ class ReleasesResponse(BaseModel):
     ebook_rejected: List[ReleaseItem] = []
     audiobook_accepted: List[ReleaseItem] = []
     audiobook_rejected: List[ReleaseItem] = []
+    in_calibre: bool = False
+    in_audiobooks: bool = False
 
 
 class DownloadRequest(BaseModel):

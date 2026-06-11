@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import re
 import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -82,6 +84,68 @@ download_client = DownloadClient(
     sabnzbd_api_key=settings.sabnzbd_api_key,
     sabnzbd_category=settings.sabnzbd_category,
 )
+
+
+# ---------------------------------------------------------------------------
+# Library presence checks
+# ---------------------------------------------------------------------------
+
+def _norm(s: str) -> str:
+    s = s.lower()
+    s = re.sub(r"[''`]", "", s)
+    s = re.sub(r"[^a-z0-9 ]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _title_variants(title: str) -> set[str]:
+    variants = {_norm(title)}
+    no_parens = re.sub(r"\s*\([^)]*\)", "", title).strip()
+    variants.add(_norm(no_parens))
+    variants.add(_norm(no_parens.split(":")[0].strip()))
+    variants.add(_norm(title.split(":")[0].strip()))
+    variants.discard("")
+    return variants
+
+
+async def _check_in_calibre(title: str, author: str) -> bool:
+    try:
+        library = await asyncio.get_event_loop().run_in_executor(
+            None, calibre_library.get_library_books
+        )
+        cands = _title_variants(title)
+        an_words = set(_norm(author).split()) if author.strip() else set()
+        for book in library:
+            if _title_variants(book["title"]) & cands:
+                if not an_words or set(_norm(book["author"]).split()) == an_words:
+                    return True
+    except Exception as exc:
+        logger.warning("Calibre presence check failed: %s", exc)
+    return False
+
+
+async def _check_in_audiobooks(title: str, author: str) -> bool:
+    try:
+        ab_dir = Path(settings.audiobooks_dir)
+        if not ab_dir.is_dir():
+            return False
+        cands = _title_variants(title)
+        an_words = set(_norm(author).split()) if author.strip() else set()
+        for entry in ab_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            normed = _norm(entry.name)
+            # Directory names are "Author - Title"; try both halves
+            parts = normed.split(" - ", 1)
+            dir_title_variants = _title_variants(parts[-1]) if parts else set()
+            if dir_title_variants & cands:
+                if not an_words:
+                    return True
+                dir_author = _norm(parts[0]) if len(parts) == 2 else ""
+                if set(dir_author.split()) == an_words:
+                    return True
+    except Exception as exc:
+        logger.warning("Audiobooks presence check failed: %s", exc)
+    return False
 
 
 @app.post("/portal/auth", response_model=AuthResponse)
@@ -201,18 +265,23 @@ async def get_releases(
     if not title.strip() and not author.strip():
         raise HTTPException(status_code=400, detail="title or author is required")
 
-    import asyncio
-    logger.info("Release search: title=%r author=%r", title, author)
+    t = title.strip()
+    a = author.strip()
+    logger.info("Release search: title=%r author=%r", t, a)
     try:
-        (eb_acc, eb_rej), (ab_acc, ab_rej) = await asyncio.gather(
-            prowlarr.search_releases(title.strip(), author.strip(), content_type="ebook"),
-            prowlarr.search_releases(title.strip(), author.strip(), content_type="audiobook"),
+        (eb_acc, eb_rej), (ab_acc, ab_rej), in_cal, in_ab = await asyncio.gather(
+            prowlarr.search_releases(t, a, content_type="ebook"),
+            prowlarr.search_releases(t, a, content_type="audiobook"),
+            _check_in_calibre(t, a),
+            _check_in_audiobooks(t, a),
         )
         return ReleasesResponse(
             ebook_accepted=[ReleaseItem(**r.to_dict()) for r in eb_acc],
             ebook_rejected=[ReleaseItem(**r.to_dict()) for r in eb_rej],
             audiobook_accepted=[ReleaseItem(**r.to_dict()) for r in ab_acc],
             audiobook_rejected=[ReleaseItem(**r.to_dict()) for r in ab_rej],
+            in_calibre=in_cal,
+            in_audiobooks=in_ab,
         )
     except Exception as e:
         logger.error("Release search error: %s", e)

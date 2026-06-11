@@ -273,6 +273,21 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     .badge-unk  { background: #E2E8F0; color: #4A5568; }
     .badge-rej  { background: var(--danger-bg); color: var(--danger-text); }
 
+    /* ── In-library banner ── */
+    .library-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius-md);
+      padding: 0.625rem 0.875rem;
+      font-size: 0.82rem;
+      color: #1E40AF;
+      margin-bottom: 0.875rem;
+    }
+    .library-notice-icon { font-size: 0.95rem; flex-shrink: 0; }
+
     /* ── Media type tabs (post-search) ── */
     .media-tabs {
       display: flex;
@@ -734,6 +749,11 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="library-notice" id="library-notice" style="display:none">
+    <span class="library-notice-icon">📚</span>
+    <span id="library-notice-text"></span>
+  </div>
+
   <div class="media-tabs" id="media-tabs" style="display:none">
     <button class="media-tab active" id="btn-tab-ebook" onclick="setActiveTab('ebook')">
       📖 Ebook <span class="tab-count" id="tab-count-ebook">0</span>
@@ -834,6 +854,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     _audiobookAccepted = []; _audiobookRejected = [];
     _activeTab = 'ebook';
     document.getElementById('results').innerHTML = '';
+    document.getElementById('library-notice').style.display = 'none';
     document.getElementById('media-tabs').style.display = 'none';
     document.getElementById('view-toggle').style.display = 'none';
     document.getElementById('btn-clear').style.display = 'none';
@@ -915,6 +936,16 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       _ebookRejected     = data.ebook_rejected     || [];
       _audiobookAccepted = data.audiobook_accepted || [];
       _audiobookRejected = data.audiobook_rejected || [];
+
+      // Library presence notices
+      const notices = [];
+      if (data.in_calibre)    notices.push('This e-book is already in the library.');
+      if (data.in_audiobooks) notices.push('This audio book is already in the library.');
+      const noticeEl = document.getElementById('library-notice');
+      if (notices.length) {
+        document.getElementById('library-notice-text').textContent = notices.join('  ');
+        noticeEl.style.display = 'flex';
+      }
 
       // Show tabs whenever there's anything to show
       const anyResults = _ebookAccepted.length || _ebookRejected.length
