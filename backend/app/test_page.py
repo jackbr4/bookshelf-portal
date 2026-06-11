@@ -886,7 +886,9 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     _view = v;
     document.getElementById('btn-basic').classList.toggle('active', v === 'basic');
     document.getElementById('btn-advanced').classList.toggle('active', v === 'advanced');
-    renderResults(_accepted, _rejected);
+    const accepted = _activeTab === 'audiobook' ? _audiobookAccepted : _ebookAccepted;
+    const rejected = _activeTab === 'audiobook' ? _audiobookRejected : _ebookRejected;
+    renderResults(accepted, rejected);
   }
 
   /* ── Fetch releases ── */
