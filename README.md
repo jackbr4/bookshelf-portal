@@ -1,6 +1,6 @@
 # Bookshelf Portal
 
-A self-hosted ebook request and download portal. Search for books via Prowlarr, send them to your torrent or usenet client, and have them automatically imported into Calibre.
+A self-hosted ebook and audiobook request portal. Search for books via Prowlarr, send them to your torrent or usenet client, and have them automatically imported into Calibre (ebooks) or Audiobookshelf (audiobooks).
 
 ## Architecture
 
@@ -10,13 +10,15 @@ Browser → Portal → Prowlarr ──► rTorrent
                            └──► SABnzbd
                                     │
                               watcher (cron)
-                                    │
-                              calibredb add
-                                    │
-                            Calibre library
+                              ┌─────┴─────┐
+                         ebook?        audiobook?
+                              │              │
+                        calibredb add    copy to
+                              │         AUDIOBOOKS_DIR
+                        Calibre lib   Audiobookshelf
 ```
 
-The portal serves a React frontend and a FastAPI backend. Users search for books, pick a release from Prowlarr results, and dispatch it to their download client. A cron-based watcher polls for completed downloads and imports them into Calibre automatically.
+The portal serves a server-rendered frontend and a FastAPI backend. Users search for books, pick a release from Prowlarr results (ebook or audiobook tab), and dispatch it to their download client. A cron-based watcher polls for completed downloads and routes them: ebooks are imported into Calibre via `calibredb add`; audiobooks are copied into the Audiobookshelf library directory.
 
 ## Required services
 
@@ -26,6 +28,7 @@ The portal serves a React frontend and a FastAPI backend. Users search for books
 | rTorrent **or** qBittorrent | Handles `.torrent` releases |
 | [SABnzbd](https://sabnzbd.org) | Handles `.nzb` (usenet) releases |
 | [Calibre](https://calibre-ebook.com) | Ebook library — `calibredb` must be reachable |
+| [Audiobookshelf](https://www.audiobookshelf.org) | Audiobook library — the watcher copies completed audiobooks here |
 
 Bookshelf / Readarr integration is **optional** — the portal works standalone with Prowlarr for search.
 
@@ -82,13 +85,17 @@ Runs every 4 hours. Pass `--dry-run` to preview what would be dispatched without
 
 ## Watcher (cron job)
 
-The watcher polls download clients for completed downloads and imports them into Calibre. Add to crontab:
+The watcher polls download clients for completed downloads and imports them automatically. Add to crontab:
 
 ```cron
 * * * * * /path/to/backend/venv/bin/python /path/to/backend/watcher.py >> /var/log/watcher.log 2>&1
 ```
 
 Pass `--env /path/to/.env` to target a specific env file.
+
+**Routing logic:**
+- **Ebook** (`media_type=ebook`) — runs `calibredb add` to import the file into Calibre, then relabels the torrent to the imported category.
+- **Audiobook** (`media_type=audiobook`) — copies the completed download (single file or directory) into `AUDIOBOOKS_DIR/Author - Title/`. Files are copied, not moved, so seeding continues. Audiobookshelf picks up the new folder on its next library scan.
 
 ## Configuration
 
@@ -153,6 +160,12 @@ Set `TORRENT_CLIENT=rtorrent` (default) or `TORRENT_CLIENT=qbittorrent`.
 | `CALIBRE_IMAGE` | `lscr.io/linuxserver/calibre:latest` | Docker image used to run `calibredb` when not installed locally |
 | `CALIBREDB_BOOKS_DIR` | `/books` | Source directory scanned by `calibredb add` |
 
+### Audiobookshelf
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUDIOBOOKS_DIR` | `/audiobooks` | Path to your Audiobookshelf library directory. Completed audiobooks are copied here as `Author - Title/`. |
+
 ### Bookshelf / Readarr (optional)
 
 | Variable | Default | Description |
@@ -196,15 +209,15 @@ bookshelf-portal/
       test_page.py         # Main portal HTML (served at /portal)
       admin_page.py        # Admin page HTML — History + Goodreads Profiles tabs
       download_client.py   # rTorrent / qBittorrent / SABnzbd dispatch
-      prowlarr_client.py   # Prowlarr search + deduplication
-      release_filter.py    # Accept/reject/score logic
+      prowlarr_client.py   # Prowlarr search + release filtering
+      release_filter.py    # Accept/reject/score logic for ebooks and audiobooks
       history.py           # SQLite download history + Goodreads profile store
-      calibre_library.py   # Calibre metadata.db reader
+      calibre_library.py   # Calibre metadata.db reader (library presence checks)
       auth.py              # Session token logic
       models.py            # Pydantic request/response models
       bookshelf_client.py  # Optional Readarr/Bookshelf integration
     goodreads_sync.py      # Cron script: Goodreads shelf → Prowlarr → download client
-    watcher.py             # Cron script: poll downloads → import → update history
+    watcher.py             # Cron script: poll downloads → import to Calibre or Audiobookshelf
     cleanup.py             # Cron script: remove old imported torrents from rTorrent
     requirements.txt
     .env.example
