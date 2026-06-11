@@ -110,6 +110,7 @@ class HistoryItem(BaseModel):
     id: str
     title: str
     author: str
+    download_id: Optional[str] = None
     release_title: Optional[str] = None
     indexer: Optional[str] = None
     protocol: Optional[str] = None
