@@ -197,19 +197,22 @@ async def get_releases(
     session=Depends(get_session),
     title: str = "",
     author: str = "",
-    media_type: str = "ebook",
 ):
     if not title.strip() and not author.strip():
         raise HTTPException(status_code=400, detail="title or author is required")
-    if media_type not in ("ebook", "audiobook"):
-        raise HTTPException(status_code=400, detail="Invalid media_type")
 
-    logger.info("Release search: title=%r author=%r media_type=%r", title, author, media_type)
+    import asyncio
+    logger.info("Release search: title=%r author=%r", title, author)
     try:
-        accepted, rejected = await prowlarr.search_releases(title.strip(), author.strip(), content_type=media_type)
+        (eb_acc, eb_rej), (ab_acc, ab_rej) = await asyncio.gather(
+            prowlarr.search_releases(title.strip(), author.strip(), content_type="ebook"),
+            prowlarr.search_releases(title.strip(), author.strip(), content_type="audiobook"),
+        )
         return ReleasesResponse(
-            accepted=[ReleaseItem(**r.to_dict()) for r in accepted],
-            rejected=[ReleaseItem(**r.to_dict()) for r in rejected],
+            ebook_accepted=[ReleaseItem(**r.to_dict()) for r in eb_acc],
+            ebook_rejected=[ReleaseItem(**r.to_dict()) for r in eb_rej],
+            audiobook_accepted=[ReleaseItem(**r.to_dict()) for r in ab_acc],
+            audiobook_rejected=[ReleaseItem(**r.to_dict()) for r in ab_rej],
         )
     except Exception as e:
         logger.error("Release search error: %s", e)

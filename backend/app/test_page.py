@@ -273,43 +273,50 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     .badge-unk  { background: #E2E8F0; color: #4A5568; }
     .badge-rej  { background: var(--danger-bg); color: var(--danger-text); }
 
-    /* ── Media type toggle ── */
-    .media-type-row {
+    /* ── Media type tabs (post-search) ── */
+    .media-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.875rem;
+    }
+    .media-tab {
       display: flex;
       align-items: center;
-      gap: 0.625rem;
-      margin-bottom: 1rem;
-    }
-    .media-type-label {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--text-sec);
-      letter-spacing: 0.02em;
-    }
-    .media-toggle {
-      display: flex;
-      gap: 2px;
-      background: var(--border);
-      border-radius: var(--radius-sm);
-      padding: 3px;
-    }
-    .media-toggle button {
-      padding: 0.28rem 0.85rem;
-      border: none;
-      background: none;
-      border-radius: 4px;
-      font-size: 0.78rem;
+      gap: 0.5rem;
+      padding: 0.45rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      font-size: 0.825rem;
       font-weight: 600;
       font-family: inherit;
       color: var(--muted);
       cursor: pointer;
       transition: all 0.15s;
-      white-space: nowrap;
+      box-shadow: var(--shadow-sm);
     }
-    .media-toggle button.active {
-      background: var(--surface);
-      color: var(--text);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    .media-tab:hover { border-color: var(--border-hover); color: var(--text-sec); }
+    .media-tab.active {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-bg);
+    }
+    .tab-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.4em;
+      padding: 0.05rem 0.4rem;
+      border-radius: 99px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      background: var(--border);
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .media-tab.active .tab-count {
+      background: var(--primary);
+      color: #fff;
     }
 
     /* ── Release cards + fade-in ── */
@@ -707,14 +714,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <main>
   <div class="search-card">
     <h2>Search for Books</h2>
-    <div class="media-type-row">
-      <span class="media-type-label">Type</span>
-      <div class="media-toggle">
-        <button id="btn-type-ebook" class="active" onclick="setMediaType('ebook')">📖 Ebook</button>
-        <button id="btn-type-audiobook" onclick="setMediaType('audiobook')">🎧 Audiobook</button>
-      </div>
-    </div>
-    <p class="search-hint" id="search-hint">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
+    <p class="search-hint">Search for ebooks and audiobooks by title and/or author. Results appear as two tabs after searching.</p>
     <div class="search-row">
       <div class="field">
         <label>Title</label>
@@ -732,6 +732,15 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       </div>
       <button class="btn-search" id="btn-search" onclick="fetchReleases()">Search</button>
     </div>
+  </div>
+
+  <div class="media-tabs" id="media-tabs" style="display:none">
+    <button class="media-tab active" id="btn-tab-ebook" onclick="setActiveTab('ebook')">
+      📖 Ebook <span class="tab-count" id="tab-count-ebook">0</span>
+    </button>
+    <button class="media-tab" id="btn-tab-audiobook" onclick="setActiveTab('audiobook')">
+      🎧 Audiobook <span class="tab-count" id="tab-count-audiobook">0</span>
+    </button>
   </div>
 
   <div class="toolbar">
@@ -755,10 +764,12 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 </div>
 
 <script>
-  let _accepted = [];
-  let _rejected = [];
+  let _ebookAccepted    = [];
+  let _ebookRejected    = [];
+  let _audiobookAccepted = [];
+  let _audiobookRejected = [];
+  let _activeTab = 'ebook';
   let _view = 'basic';
-  let _mediaType = 'ebook';
 
   /* ── Auth ── */
   function showLoginScreen() {
@@ -775,10 +786,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   }
 
   function handle401() {
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('view-toggle').style.display = 'none';
-    document.getElementById('btn-clear').style.display = 'none';
-    setStatus('');
+    _resetResults();
     showLoginScreen();
   }
 
@@ -814,15 +822,22 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
   async function doSignOut() {
     await fetch('/portal/logout', { method: 'POST', credentials: 'include' });
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('view-toggle').style.display = 'none';
-    document.getElementById('btn-clear').style.display = 'none';
+    _resetResults();
     document.getElementById('inp-title').value = '';
     document.getElementById('inp-author').value = '';
     updateInputClears();
-    setStatus('');
-    _accepted = []; _rejected = [];
     showLoginScreen();
+  }
+
+  function _resetResults() {
+    _ebookAccepted = []; _ebookRejected = [];
+    _audiobookAccepted = []; _audiobookRejected = [];
+    _activeTab = 'ebook';
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('media-tabs').style.display = 'none';
+    document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
+    setStatus('');
   }
 
   /* Check session on load */
@@ -852,28 +867,18 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('inp-title').value = '';
     document.getElementById('inp-author').value = '';
     updateInputClears();
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('view-toggle').style.display = 'none';
-    document.getElementById('btn-clear').style.display = 'none';
-    setStatus('');
-    _accepted = []; _rejected = [];
+    _resetResults();
   }
 
-  /* ── Media type toggle ── */
-  function setMediaType(t) {
-    _mediaType = t;
-    document.getElementById('btn-type-ebook').classList.toggle('active', t === 'ebook');
-    document.getElementById('btn-type-audiobook').classList.toggle('active', t === 'audiobook');
-    const hint = t === 'audiobook'
-      ? 'Enter a title and/or author below. After downloading, the audiobook will appear in Audiobookshelf within 1–2 minutes.'
-      : 'Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.';
-    document.getElementById('search-hint').textContent = hint;
-    // Clear any previous results when switching type
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('view-toggle').style.display = 'none';
-    document.getElementById('btn-clear').style.display = 'none';
-    setStatus('');
-    _accepted = []; _rejected = [];
+  /* ── Media tab (post-search) ── */
+  function setActiveTab(t) {
+    _activeTab = t;
+    document.getElementById('btn-tab-ebook').classList.toggle('active', t === 'ebook');
+    document.getElementById('btn-tab-audiobook').classList.toggle('active', t === 'audiobook');
+    const accepted = t === 'ebook' ? _ebookAccepted : _audiobookAccepted;
+    const rejected = t === 'ebook' ? _ebookRejected : _audiobookRejected;
+    document.getElementById('view-toggle').style.display = accepted.length ? 'flex' : 'none';
+    renderResults(accepted, rejected);
   }
 
   /* ── View toggle ── */
@@ -893,25 +898,37 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     const btn = document.getElementById('btn-search');
     btn.disabled = true;
     btn.textContent = 'Searching…';
-    setStatus('');
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('view-toggle').style.display = 'none';
-    document.getElementById('btn-clear').style.display = 'none';
-    _accepted = []; _rejected = [];
+    _resetResults();
 
     const qs = new URLSearchParams();
     if (title)  qs.set('title', title);
     if (author) qs.set('author', author);
-    qs.set('media_type', _mediaType);
 
     try {
       const resp = await fetch('/portal/releases?' + qs, { credentials: 'include' });
       if (resp.status === 401) { handle401(); return; }
       if (!resp.ok) throw new Error('HTTP ' + resp.status + ' — ' + (await resp.text()));
       const data = await resp.json();
-      _accepted = data.accepted || [];
-      _rejected = data.rejected || [];
-      renderResults(_accepted, _rejected);
+      _ebookAccepted     = data.ebook_accepted     || [];
+      _ebookRejected     = data.ebook_rejected     || [];
+      _audiobookAccepted = data.audiobook_accepted || [];
+      _audiobookRejected = data.audiobook_rejected || [];
+
+      // Show tabs whenever there's anything to show
+      const anyResults = _ebookAccepted.length || _ebookRejected.length
+                      || _audiobookAccepted.length || _audiobookRejected.length;
+      if (anyResults) {
+        document.getElementById('tab-count-ebook').textContent     = _ebookAccepted.length;
+        document.getElementById('tab-count-audiobook').textContent = _audiobookAccepted.length;
+        document.getElementById('media-tabs').style.display = 'flex';
+        document.getElementById('btn-clear').style.display  = 'inline-flex';
+        // Auto-select: prefer ebook if it has accepted results, else audiobook
+        _activeTab = _ebookAccepted.length > 0 ? 'ebook' : 'audiobook';
+        setActiveTab(_activeTab);
+      } else {
+        document.getElementById('results').innerHTML =
+          '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found for this search. Try a different title or author.</p></div>';
+      }
     } catch (e) {
       setStatus(e.message, 'err');
     } finally {
@@ -926,8 +943,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
     if (!accepted.length && !rejected.length) {
       document.getElementById('view-toggle').style.display = 'none';
-      document.getElementById('btn-clear').style.display = 'none';
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No releases found for this search. Try a different title or author.</p></div>';
+      const typeLabel = _activeTab === 'audiobook' ? 'audiobook' : 'ebook';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>No ' + typeLabel + ' releases found for this search.</p></div>';
       setStatus('');
       return;
     }
@@ -938,7 +955,6 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     setStatus(label + (rejected.length ? ' &nbsp;&middot;&nbsp; ' + rejected.length + ' filtered out' : ''));
 
     document.getElementById('view-toggle').style.display = accepted.length ? 'flex' : 'none';
-    document.getElementById('btn-clear').style.display = 'inline-flex';
 
     let html = '';
 
@@ -1033,7 +1049,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
   /* ── Dispatch ── */
   async function dispatch(index, btn) {
-    const release = _accepted[index];
+    const release = (_activeTab === 'audiobook' ? _audiobookAccepted : _ebookAccepted)[index];
     const title   = document.getElementById('inp-title').value.trim();
     const author  = document.getElementById('inp-author').value.trim();
     const displayTitle = title || release.title;
@@ -1053,13 +1069,13 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
           indexer:       release.indexer,
           protocol:      release.protocol,
           download_url:  release.download_url,
-          media_type:    _mediaType,
+          media_type:    _activeTab,
         }),
       });
       if (resp.status === 401) { handle401(); return; }
       const data = await resp.json();
       if (data.ok) {
-        const dest = _mediaType === 'audiobook'
+        const dest = _activeTab === 'audiobook'
           ? 'Audiobookshelf library'
           : 'Calibre library';
         showToast(displayTitle + ' is being downloaded and should be available in the ' + dest + ' within 1–2 minutes.', 'success');

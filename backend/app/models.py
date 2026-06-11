@@ -81,8 +81,10 @@ class ReleaseItem(BaseModel):
 
 
 class ReleasesResponse(BaseModel):
-    accepted: List[ReleaseItem]
-    rejected: List[ReleaseItem]
+    ebook_accepted: List[ReleaseItem] = []
+    ebook_rejected: List[ReleaseItem] = []
+    audiobook_accepted: List[ReleaseItem] = []
+    audiobook_rejected: List[ReleaseItem] = []
 
 
 class DownloadRequest(BaseModel):
