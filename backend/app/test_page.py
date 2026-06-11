@@ -268,8 +268,49 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     }
     .badge-epub { background: var(--success-bg); color: var(--success-text); }
     .badge-pdf  { background: var(--warning-bg); color: var(--warning-text); }
+    .badge-m4b  { background: #EDE9FE; color: #4C1D95; }
+    .badge-mp3  { background: #FEF3C7; color: #78350F; }
     .badge-unk  { background: #E2E8F0; color: #4A5568; }
     .badge-rej  { background: var(--danger-bg); color: var(--danger-text); }
+
+    /* ── Media type toggle ── */
+    .media-type-row {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      margin-bottom: 1rem;
+    }
+    .media-type-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-sec);
+      letter-spacing: 0.02em;
+    }
+    .media-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--border);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+    }
+    .media-toggle button {
+      padding: 0.28rem 0.85rem;
+      border: none;
+      background: none;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .media-toggle button.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
 
     /* ── Release cards + fade-in ── */
     @keyframes fadeInUp {
@@ -309,6 +350,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     }
     .release-card.fmt-epub::before { background: var(--success); }
     .release-card.fmt-pdf::before  { background: #B45309; }
+    .release-card.fmt-m4b::before  { background: #7C3AED; }
+    .release-card.fmt-mp3::before  { background: #D97706; }
     .release-card.fmt-unk::before  { background: #CBD5E1; }
 
     .release-card:hover {
@@ -664,7 +707,14 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 <main>
   <div class="search-card">
     <h2>Search for Books</h2>
-    <p class="search-hint">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
+    <div class="media-type-row">
+      <span class="media-type-label">Type</span>
+      <div class="media-toggle">
+        <button id="btn-type-ebook" class="active" onclick="setMediaType('ebook')">📖 Ebook</button>
+        <button id="btn-type-audiobook" onclick="setMediaType('audiobook')">🎧 Audiobook</button>
+      </div>
+    </div>
+    <p class="search-hint" id="search-hint">Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.</p>
     <div class="search-row">
       <div class="field">
         <label>Title</label>
@@ -708,6 +758,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
   let _accepted = [];
   let _rejected = [];
   let _view = 'basic';
+  let _mediaType = 'ebook';
 
   /* ── Auth ── */
   function showLoginScreen() {
@@ -808,6 +859,23 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     _accepted = []; _rejected = [];
   }
 
+  /* ── Media type toggle ── */
+  function setMediaType(t) {
+    _mediaType = t;
+    document.getElementById('btn-type-ebook').classList.toggle('active', t === 'ebook');
+    document.getElementById('btn-type-audiobook').classList.toggle('active', t === 'audiobook');
+    const hint = t === 'audiobook'
+      ? 'Enter a title and/or author below. After downloading, the audiobook will appear in Audiobookshelf within 1–2 minutes.'
+      : 'Enter a book title and/or author below. After downloading, a book will appear in the Calibre library within 1–2 minutes.';
+    document.getElementById('search-hint').textContent = hint;
+    // Clear any previous results when switching type
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('view-toggle').style.display = 'none';
+    document.getElementById('btn-clear').style.display = 'none';
+    setStatus('');
+    _accepted = []; _rejected = [];
+  }
+
   /* ── View toggle ── */
   function setView(v) {
     _view = v;
@@ -834,6 +902,7 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
     const qs = new URLSearchParams();
     if (title)  qs.set('title', title);
     if (author) qs.set('author', author);
+    qs.set('media_type', _mediaType);
 
     try {
       const resp = await fetch('/portal/releases?' + qs, { credentials: 'include' });
@@ -880,8 +949,10 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
       html += '<div class="card-list">';
       accepted.forEach((r, i) => {
         const fmt = (r.detected_format || '').toLowerCase();
-        const fmtClass = fmt === 'epub' ? 'fmt-epub' : fmt === 'pdf' ? 'fmt-pdf' : 'fmt-unk';
-        const badgeCls = fmt === 'epub' ? 'badge-epub' : fmt === 'pdf' ? 'badge-pdf' : 'badge-unk';
+        const fmtClass = fmt === 'epub' ? 'fmt-epub' : fmt === 'pdf' ? 'fmt-pdf'
+                       : fmt === 'm4b'  ? 'fmt-m4b'  : fmt === 'mp3' ? 'fmt-mp3' : 'fmt-unk';
+        const badgeCls = fmt === 'epub' ? 'badge-epub' : fmt === 'pdf' ? 'badge-pdf'
+                       : fmt === 'm4b'  ? 'badge-m4b'  : fmt === 'mp3' ? 'badge-mp3' : 'badge-unk';
 
         html += '<div class="release-card ' + fmtClass + '">';
         html += '<div class="card-main">';
@@ -982,12 +1053,16 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
           indexer:       release.indexer,
           protocol:      release.protocol,
           download_url:  release.download_url,
+          media_type:    _mediaType,
         }),
       });
       if (resp.status === 401) { handle401(); return; }
       const data = await resp.json();
       if (data.ok) {
-        showToast(displayTitle + ' is being downloaded and should be available in the Calibre library within 1–2 minutes.', 'success');
+        const dest = _mediaType === 'audiobook'
+          ? 'Audiobookshelf library'
+          : 'Calibre library';
+        showToast(displayTitle + ' is being downloaded and should be available in the ' + dest + ' within 1–2 minutes.', 'success');
       } else {
         throw new Error(data.detail || JSON.stringify(data));
       }

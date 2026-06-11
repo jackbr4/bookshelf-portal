@@ -14,6 +14,7 @@ Without --env it reads from the production .env next to settings.py.
 
 import argparse
 import logging
+import shutil
 import ssl
 import sys
 import xml.etree.ElementTree as ET
@@ -22,6 +23,7 @@ from typing import Optional
 from urllib.request import Request, urlopen
 from base64 import b64encode
 import json
+import re
 import urllib.parse
 
 # ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 BOOK_EXTENSIONS = {".epub", ".pdf"}
+AUDIO_EXTENSIONS = {".m4b", ".mp3", ".m4a"}
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +351,54 @@ def find_book_file(base_path: str) -> Optional[Path]:
     return None
 
 
+def find_audio_file(base_path: str) -> Optional[Path]:
+    """Find the primary audio file (m4b preferred, then mp3/m4a) at or under base_path."""
+    p = Path(base_path)
+    if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS:
+        return p
+    if p.is_dir():
+        for ext in (".m4b", ".m4a", ".mp3"):
+            matches = sorted(p.rglob(f"*{ext}"))
+            if matches:
+                return matches[0]
+    return None
+
+
+def _safe_dirname(author: str, title: str) -> str:
+    """Build a filesystem-safe 'Author - Title' directory name."""
+    def _clean(s: str) -> str:
+        s = s.strip()
+        s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", s)
+        return s.strip(" .")[:80]
+    a = _clean(author) or "Unknown"
+    t = _clean(title) or "Unknown"
+    return f"{a} - {t}"
+
+
+def copy_audiobook(base_path: str, author: str, title: str) -> Path:
+    """
+    Copy a completed audiobook torrent into the Audiobookshelf library.
+
+    Creates AUDIOBOOKS_DIR/Author - Title/ and copies the file(s) there.
+    Uses copy (not move) so the torrent keeps seeding.
+    Returns the destination directory path.
+    """
+    dest_dir = Path(settings.audiobooks_dir) / _safe_dirname(author, title)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    src = Path(base_path)
+    if src.is_dir():
+        # Multi-file release: copy all audio files preserving directory layout
+        shutil.copytree(str(src), str(dest_dir), dirs_exist_ok=True)
+        logger.info("[watcher] audiobook copytree %s → %s", src, dest_dir)
+    else:
+        # Single file
+        shutil.copy2(str(src), str(dest_dir / src.name))
+        logger.info("[watcher] audiobook copy %s → %s", src.name, dest_dir)
+
+    return dest_dir
+
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -358,6 +409,7 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
     protocol = record["protocol"]
     title = record["title"]
     author = record["author"]
+    media_type = record.get("media_type") or "ebook"
 
     if protocol == "torrent":
         if settings.torrent_client == "qbittorrent":
@@ -375,15 +427,20 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
             logger.warning("[watcher] no base_path for %r — skipping", title)
             return
 
-        book_file = find_book_file(base_path)
-        if book_file is None:
-            logger.warning(
-                "[watcher] no epub/pdf found under %s for %r", base_path, title
-            )
-            db.update_download_status(record_id, "error", "no epub/pdf found")
-            return
-
-        logger.info("[watcher] %r complete — importing %s", title, book_file.name)
+        if media_type == "audiobook":
+            audio_file = find_audio_file(base_path)
+            if audio_file is None:
+                logger.warning("[watcher] no audio file found under %s for %r", base_path, title)
+                db.update_download_status(record_id, "error", "no audio file found")
+                return
+            logger.info("[watcher] %r complete — copying audiobook from %s", title, base_path)
+        else:
+            book_file = find_book_file(base_path)
+            if book_file is None:
+                logger.warning("[watcher] no epub/pdf found under %s for %r", base_path, title)
+                db.update_download_status(record_id, "error", "no epub/pdf found")
+                return
+            logger.info("[watcher] %r complete — importing %s", title, book_file.name)
 
     elif protocol == "usenet":
         complete, storage = sab_is_complete(download_id)
@@ -395,13 +452,21 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
             db.update_download_status(record_id, "error", "no storage path from SABnzbd")
             return
 
-        book_file = find_book_file(storage)
-        if book_file is None:
-            logger.warning("[watcher] no epub/pdf found in %s for %r", storage, title)
-            db.update_download_status(record_id, "error", "no epub/pdf found")
-            return
-
-        logger.info("[watcher] %r complete — importing %s", title, book_file.name)
+        if media_type == "audiobook":
+            audio_file = find_audio_file(storage)
+            if audio_file is None:
+                logger.warning("[watcher] no audio file found in %s for %r", storage, title)
+                db.update_download_status(record_id, "error", "no audio file found")
+                return
+            base_path = storage
+            logger.info("[watcher] %r complete — copying audiobook from %s", title, storage)
+        else:
+            book_file = find_book_file(storage)
+            if book_file is None:
+                logger.warning("[watcher] no epub/pdf found in %s for %r", storage, title)
+                db.update_download_status(record_id, "error", "no epub/pdf found")
+                return
+            logger.info("[watcher] %r complete — importing %s", title, book_file.name)
 
     else:
         logger.warning("[watcher] unknown protocol %r for %r", protocol, title)
@@ -409,6 +474,28 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
 
     # Mark as importing so we don't pick it up again on the next run
     db.update_download_status(record_id, "importing")
+
+    if media_type == "audiobook":
+        try:
+            dest_dir = copy_audiobook(base_path, author, title)
+        except Exception as exc:
+            logger.error("[watcher] audiobook copy failed for %r: %s", title, exc)
+            db.update_download_status(record_id, "error", f"audiobook copy failed: {exc}")
+            db.create_import(record_id, str(base_path), "error", error=str(exc))
+            return
+
+        db.create_import(record_id, str(dest_dir), "imported")
+        db.update_download_status(record_id, "imported")
+
+        # Relabel torrent (seeding continues — we copied, not moved)
+        if protocol == "torrent":
+            if settings.torrent_client == "qbittorrent" and qbt:
+                qbt_set_category(download_id, settings.qbittorrent_imported_category, qbt)
+            else:
+                rt_set_category(download_id, settings.rtorrent_imported_category)
+
+        logger.info("[watcher] audiobook %r copied to %s", title, dest_dir)
+        return
 
     calibre_id = calibre.add_book(str(book_file))
     if calibre_id is None:

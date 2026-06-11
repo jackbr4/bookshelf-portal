@@ -47,6 +47,12 @@ class HistoryDB:
             except Exception:
                 pass  # column already exists
 
+            # Add media_type column to existing downloads tables that predate it
+            try:
+                conn.execute("ALTER TABLE downloads ADD COLUMN media_type TEXT")
+            except Exception:
+                pass  # column already exists
+
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS downloads (
                     id              TEXT PRIMARY KEY,
@@ -57,6 +63,7 @@ class HistoryDB:
                     protocol        TEXT,
                     download_id     TEXT,
                     source          TEXT,
+                    media_type      TEXT,
                     status          TEXT NOT NULL DEFAULT 'downloading',
                     created_at      TEXT NOT NULL,
                     updated_at      TEXT NOT NULL,
@@ -107,6 +114,7 @@ class HistoryDB:
         protocol: str,
         download_id: str,
         source: Optional[str] = None,
+        media_type: Optional[str] = None,
     ) -> str:
         record_id = str(uuid.uuid4())
         now = _now()
@@ -114,10 +122,10 @@ class HistoryDB:
             conn.execute(
                 """INSERT INTO downloads
                    (id, title, author, release_title, indexer, protocol,
-                    download_id, source, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'downloading', ?, ?)""",
+                    download_id, source, media_type, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'downloading', ?, ?)""",
                 (record_id, title, author, release_title, indexer,
-                 protocol, download_id, source, now, now),
+                 protocol, download_id, source, media_type, now, now),
             )
         return record_id
 

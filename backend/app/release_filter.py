@@ -14,6 +14,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 ACCEPTED_FORMATS = {"epub", "pdf"}
+ACCEPTED_FORMATS_AUDIO = {"m4b", "mp3", "m4a"}
 
 REJECTED_FORMATS = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4", "mobi", "azw3"}
 AUDIO_FORMATS    = {"mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "aiff", "mp4"}
@@ -25,12 +26,16 @@ REJECTED_KEYWORDS = {
     "critical analysis", "a companion to", "cliff notes", "cliffsnotes",
     "sample", "preview", "excerpt",
 }
+# Keywords only relevant for ebooks (drop them in audiobook mode)
+_EBOOK_ONLY_KEYWORDS = {"audiobook", "audio book", "unabridged"}
 
-MIN_SIZE_BYTES = 512 * 1024        # 0.5 MB — applied to newsgroup results only
-MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB — above this is likely an audiobook or bundle
+MIN_SIZE_BYTES = 512 * 1024          # 0.5 MB — applied to newsgroup results only
+MAX_SIZE_BYTES = 200 * 1024 * 1024   # 200 MB — above this is likely an audiobook or bundle
+MAX_SIZE_BYTES_AUDIO = 2 * 1024 * 1024 * 1024  # 2 GB for audiobooks
 
 # Format score: higher wins
 FORMAT_SCORE = {"epub": 30, "pdf": 5}
+FORMAT_SCORE_AUDIO = {"m4b": 30, "m4a": 20, "mp3": 5}
 
 # Indexer preference bonus applied by score_release()
 INDEXER_SCORE_BONUS = 10
@@ -76,14 +81,21 @@ def extract_formats(title: str) -> set[str]:
     return found
 
 
-def best_format(formats: set[str]) -> Optional[str]:
+def best_format(formats: set[str], content_type: str = "ebook") -> Optional[str]:
     """Return the highest-scoring accepted format from the set, or None."""
+    if content_type == "audiobook":
+        score_map = FORMAT_SCORE_AUDIO
+        accepted = ACCEPTED_FORMATS_AUDIO
+    else:
+        score_map = FORMAT_SCORE
+        accepted = ACCEPTED_FORMATS
+
     best = None
     best_score = -1
     for fmt in formats:
-        if fmt in ACCEPTED_FORMATS and FORMAT_SCORE.get(fmt, 0) > best_score:
+        if fmt in accepted and score_map.get(fmt, 0) > best_score:
             best = fmt
-            best_score = FORMAT_SCORE[fmt]
+            best_score = score_map[fmt]
     return best
 
 
@@ -111,28 +123,49 @@ def _is_trusted(indexer: str) -> bool:
     return any(k in lower for k in _TRUSTED_INDEXERS)
 
 
-def filter_release(title: str, size_bytes: int, formats: set[str], indexer: str = "") -> FilterResult:
+def filter_release(
+    title: str,
+    size_bytes: int,
+    formats: set[str],
+    indexer: str = "",
+    content_type: str = "ebook",
+) -> FilterResult:
     """Return a FilterResult indicating whether a release should be shown."""
+    is_audio = content_type == "audiobook"
 
-    # Minimum size only applies to newsgroup sources; MAM is curated so small
-    # files are legitimate (e.g. short novels like The Old Man and the Sea).
-    if not _is_trusted(indexer) and size_bytes < MIN_SIZE_BYTES:
-        return FilterResult(accepted=False, reason=f"too small ({size_bytes // 1024}KB)")
-    if size_bytes > MAX_SIZE_BYTES:
+    # Size limits differ by type
+    max_size = MAX_SIZE_BYTES_AUDIO if is_audio else MAX_SIZE_BYTES
+    if size_bytes > max_size:
         return FilterResult(accepted=False, reason=f"too large ({size_bytes // 1024 // 1024}MB)")
 
-    # Reject on title keywords regardless of format
-    kw = _has_rejected_keyword(title)
-    if kw:
-        return FilterResult(accepted=False, reason=f"rejected keyword ({kw!r})")
+    # Minimum size only applies to newsgroup ebook sources
+    if not is_audio and not _is_trusted(indexer) and size_bytes < MIN_SIZE_BYTES:
+        return FilterResult(accepted=False, reason=f"too small ({size_bytes // 1024}KB)")
 
-    # Accept if an accepted format is present — a title like "[AZW3 EPUB]" has
-    # epub and should be accepted even though azw3 is also listed.
-    fmt = best_format(formats)
+    # Reject on title keywords (audiobook mode drops audio-specific noise words)
+    active_keywords = (REJECTED_KEYWORDS - _EBOOK_ONLY_KEYWORDS) if is_audio else REJECTED_KEYWORDS
+    lower = title.lower()
+    for kw in active_keywords:
+        # Use word-boundary check for "abridged" so it doesn't match inside "unabridged"
+        if kw == "abridged":
+            if re.search(r'\babridged\b', lower):
+                return FilterResult(accepted=False, reason=f"rejected keyword ({kw!r})")
+        elif kw in lower:
+            return FilterResult(accepted=False, reason=f"rejected keyword ({kw!r})")
+
+    # Accept if an accepted format is present
+    fmt = best_format(formats, content_type)
     if fmt:
         return FilterResult(accepted=True, detected_format=fmt)
 
     # No accepted format — reject with a precise reason
+    if is_audio:
+        bad_formats = formats - ACCEPTED_FORMATS_AUDIO
+        if formats:
+            detected = ", ".join(sorted(formats))
+            return FilterResult(accepted=False, reason=f"unsupported format ({detected})")
+        return FilterResult(accepted=True, detected_format=None)
+
     bad_formats = formats & REJECTED_FORMATS
     if bad_formats:
         bad = bad_formats.pop()
@@ -157,11 +190,14 @@ def score_release(
     seeders: Optional[int],
     size_bytes: int,
     age_days: Optional[int],
+    content_type: str = "ebook",
 ) -> int:
     score = 0
+    is_audio = content_type == "audiobook"
 
     # Format preference
-    score += FORMAT_SCORE.get(detected_format or "", 0)
+    score_map = FORMAT_SCORE_AUDIO if is_audio else FORMAT_SCORE
+    score += score_map.get(detected_format or "", 0)
 
     # Preferred indexer bonus
     lower_indexer = indexer.lower()
@@ -173,12 +209,13 @@ def score_release(
         import math
         score += min(int(math.log2(seeders + 1) * 3), 20)
 
-    # Prefer smaller files within accepted range (less likely to be bundles)
-    mb = size_bytes / 1024 / 1024
-    if mb < 5:
-        score += 5
-    elif mb < 20:
-        score += 10
+    # File-size preference: ebooks prefer small (bundle avoidance); audiobooks skip this
+    if not is_audio:
+        mb = size_bytes / 1024 / 1024
+        if mb < 5:
+            score += 5
+        elif mb < 20:
+            score += 10
 
     # Prefer newer releases (NZB age)
     if age_days is not None:

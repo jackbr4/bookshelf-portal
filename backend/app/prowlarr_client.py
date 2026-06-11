@@ -77,30 +77,34 @@ class ProwlarrClient:
         )
 
     async def search_releases(
-        self, title: str, author: str
+        self, title: str, author: str, content_type: str = "ebook"
     ) -> tuple[list[ReleaseResult], list[ReleaseResult]]:
         """
-        Search Prowlarr for ebook releases matching title + author.
+        Search Prowlarr for releases matching title + author.
 
+        content_type: "ebook" (default) or "audiobook" — controls categories and filtering.
         Returns (accepted, rejected) — both lists are sorted by score descending.
         Rejected entries include a reject_reason for UI display.
         """
+        if content_type == "audiobook":
+            categories = [("categories", 3030), ("categories", 100013)]
+        else:
+            categories = [("categories", 7020), ("categories", 107020)]
+
         queries = _build_queries(title, author)
         raw_results: list[dict] = []
         seen_guids: set[str] = set()
 
         for query in queries:
             try:
-                logger.info("[prowlarr] searching: %r", query)
+                logger.info("[prowlarr] searching (%s): %r", content_type, query)
                 resp = await self._client.get(
                     "/api/v1/search",
                     params=[
                         ("query", query),
                         ("type", "search"),
                         ("limit", 100),
-                        ("categories", 7020),
-                        ("categories", 107020),
-                    ],
+                    ] + categories,
                 )
                 if not resp.is_success:
                     logger.warning("[prowlarr] search returned %s for %r", resp.status_code, query)
@@ -123,10 +127,10 @@ class ProwlarrClient:
             except httpx.RequestError as e:
                 logger.warning("[prowlarr] request error for %r: %s", query, e)
 
-        return self._process(raw_results)
+        return self._process(raw_results, content_type=content_type)
 
     def _process(
-        self, raw: list[dict]
+        self, raw: list[dict], content_type: str = "ebook"
     ) -> tuple[list[ReleaseResult], list[ReleaseResult]]:
         accepted: list[ReleaseResult] = []
         rejected: list[ReleaseResult] = []
@@ -136,9 +140,9 @@ class ProwlarrClient:
             size = item.get("size", 0) or 0
             indexer = item.get("indexer", "")
             formats = extract_formats(title)
-            result = filter_release(title, size, formats, indexer)
+            result = filter_release(title, size, formats, indexer, content_type=content_type)
 
-            fmt = result.detected_format or best_format(formats)
+            fmt = result.detected_format or best_format(formats, content_type)
             release = ReleaseResult(
                 raw=item,
                 detected_format=fmt,
@@ -148,6 +152,7 @@ class ProwlarrClient:
                     seeders=item.get("seeders"),
                     size_bytes=size,
                     age_days=item.get("age"),
+                    content_type=content_type,
                 ) if result.accepted else 0,
             )
 

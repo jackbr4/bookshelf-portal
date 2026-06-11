@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     calibre_image: str = "lscr.io/linuxserver/calibre:latest"
     calibredb_books_dir: str = "/books"
 
+    # --- Audiobookshelf ---
+    audiobooks_dir: str = "/home/jackbr4/files/audiobooks"
+
     # --- History DB ---
     history_db_path: str = "./history.db"
 

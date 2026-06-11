@@ -92,6 +92,7 @@ class DownloadRequest(BaseModel):
     indexer: str
     protocol: str
     download_url: str
+    media_type: Optional[str] = None
 
 
 class DownloadResponse(BaseModel):
@@ -109,6 +110,7 @@ class HistoryItem(BaseModel):
     indexer: Optional[str] = None
     protocol: Optional[str] = None
     source: Optional[str] = None
+    media_type: Optional[str] = None
     status: str
     created_at: str
     updated_at: str

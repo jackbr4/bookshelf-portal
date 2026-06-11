@@ -161,8 +161,10 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
         raise HTTPException(status_code=400, detail="Invalid download URL")
     if body.protocol not in ("torrent", "usenet"):
         raise HTTPException(status_code=400, detail="Invalid protocol")
+    if body.media_type not in (None, "ebook", "audiobook"):
+        raise HTTPException(status_code=400, detail="Invalid media_type")
 
-    logger.info("Download dispatch: %r by %r via %s", body.title, body.author, body.protocol)
+    logger.info("Download dispatch: %r by %r via %s (%s)", body.title, body.author, body.protocol, body.media_type or "ebook")
     try:
         download_id = await download_client.dispatch(
             protocol=body.protocol,
@@ -176,6 +178,7 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
             indexer=body.indexer,
             protocol=body.protocol,
             download_id=download_id,
+            media_type=body.media_type,
         )
         return DownloadResponse(
             ok=True,
@@ -189,13 +192,21 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
 
 
 @app.get("/portal/releases", response_model=ReleasesResponse)
-async def get_releases(request: Request, session=Depends(get_session), title: str = "", author: str = ""):
+async def get_releases(
+    request: Request,
+    session=Depends(get_session),
+    title: str = "",
+    author: str = "",
+    media_type: str = "ebook",
+):
     if not title.strip() and not author.strip():
         raise HTTPException(status_code=400, detail="title or author is required")
+    if media_type not in ("ebook", "audiobook"):
+        raise HTTPException(status_code=400, detail="Invalid media_type")
 
-    logger.info("Release search: title=%r author=%r", title, author)
+    logger.info("Release search: title=%r author=%r media_type=%r", title, author, media_type)
     try:
-        accepted, rejected = await prowlarr.search_releases(title.strip(), author.strip())
+        accepted, rejected = await prowlarr.search_releases(title.strip(), author.strip(), content_type=media_type)
         return ReleasesResponse(
             accepted=[ReleaseItem(**r.to_dict()) for r in accepted],
             rejected=[ReleaseItem(**r.to_dict()) for r in rejected],
