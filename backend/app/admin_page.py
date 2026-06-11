@@ -83,11 +83,14 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     /* ── Stat cards ── */
     .stats-row {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 1rem;
       margin-bottom: 2rem;
     }
-    @media (max-width: 640px) {
+    @media (max-width: 700px) {
+      .stats-row { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 480px) {
       .stats-row { grid-template-columns: repeat(2, 1fr); }
     }
 
@@ -118,6 +121,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .stat-card.green .stat-value { color: var(--success); }
     .stat-card.blue  .stat-value { color: var(--primary); }
     .stat-card.red   .stat-value { color: var(--danger); }
+    .stat-card.teal  .stat-value { color: #0D9488; }
 
     /* ── Section heading ── */
     .section-heading {
@@ -212,6 +216,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .chip-goodreads  { background: #FCE7F3; border-color: #F9A8D4; color: #9D174D; }
     .chip-ebook      { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
     .chip-audiobook  { background: #DBEAFE; border-color: #BFDBFE; color: #1E40AF; }
+    .chip-seeding    { background: #CCFBF1; border-color: #99F6E4; color: #0F766E; }
 
     /* ── History media filter ── */
     .history-filter {
@@ -514,6 +519,10 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         <div class="stat-value" id="stat-errors">—</div>
         <div class="stat-label">Errors</div>
       </div>
+      <div class="stat-card teal">
+        <div class="stat-value" id="stat-seeding">—</div>
+        <div class="stat-label">Seeding</div>
+      </div>
     </div>
     <div id="history-filter-bar" class="history-filter" style="display:none">
       <button class="filter-btn active" data-filter="all"       onclick="setHistoryFilter('all')">All</button>
@@ -611,6 +620,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 
   let _allHistoryItems = [];
   let _historyFilter   = 'all';
+  let _seedingHashes   = new Set();
 
   async function load() {
     try {
@@ -622,17 +632,35 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       renderStats(_allHistoryItems);
       document.getElementById('history-filter-bar').style.display = _allHistoryItems.length ? '' : 'none';
       applyHistoryFilter();
+      loadSeedingStatus();
     } catch (e) {
       document.getElementById('history-section').innerHTML =
         '<div class="empty-state"><p style="color:var(--danger)">' + esc(e.message) + '</p></div>';
     }
   }
 
+  async function loadSeedingStatus() {
+    try {
+      const resp = await fetch('/portal/seeding', { credentials: 'include' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      _seedingHashes = new Set((data.seeding_hashes || []).map(h => h.toUpperCase()));
+      renderStats(_allHistoryItems);
+      applyHistoryFilter();
+    } catch (e) {
+      // Best-effort — ignore failures
+    }
+  }
+
   function renderStats(items) {
+    const seedingCount = items.filter(i =>
+      i.protocol === 'torrent' && _seedingHashes.has((i.download_id || '').toUpperCase())
+    ).length;
     document.getElementById('stat-total').textContent    = items.length;
     document.getElementById('stat-imported').textContent = items.filter(i => i.status === 'imported').length;
     document.getElementById('stat-active').textContent   = items.filter(i => i.status === 'downloading' || i.status === 'importing').length;
     document.getElementById('stat-errors').textContent   = items.filter(i => i.status === 'error').length;
+    document.getElementById('stat-seeding').textContent  = seedingCount;
   }
 
   function setHistoryFilter(f) {
@@ -698,6 +726,12 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
           ? '<span class="chip chip-audiobook">audio book</span>'
           : '';
 
+      const isSeeding = item.protocol === 'torrent'
+        && _seedingHashes.has((item.download_id || '').toUpperCase());
+      const seedingChip = isSeeding
+        ? '<span class="chip chip-seeding">seeding</span>'
+        : '';
+
       html += '<div class="history-card ' + statusClass + '">';
 
       html += '<div class="card-left">';
@@ -711,7 +745,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
               + esc(item.release_title) + '</div>';
       }
 
-      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + mediaChip + '</div>';
+      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + mediaChip + seedingChip + '</div>';
       html += '</div>';
 
       html += '<div class="card-right">'

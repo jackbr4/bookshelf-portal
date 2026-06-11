@@ -348,6 +348,62 @@ class DownloadClient:
         )
         return info_hash
 
+    async def get_seeding_hashes(self) -> list[str]:
+        """Return info hashes of rTorrent torrents currently in the imported category."""
+        if self._torrent_client != "rtorrent":
+            return []
+        body = (
+            '<?xml version="1.0"?>'
+            "<methodCall>"
+            "<methodName>d.multicall2</methodName>"
+            "<params>"
+            '<param><value><string></string></value></param>'
+            '<param><value><string>main</string></value></param>'
+            '<param><value><string>d.hash=</string></value></param>'
+            '<param><value><string>d.custom1=</string></value></param>'
+            '<param><value><string>d.complete=</string></value></param>'
+            "</params>"
+            "</methodCall>"
+        )
+        try:
+            resp = await self._rt_client.post(
+                self._rt_url,
+                content=body,
+                headers={"Content-Type": "text/xml"},
+                auth=self._rt_auth,
+            )
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("[rtorrent] get_seeding_hashes failed: %s", exc)
+            return []
+
+        hashes: list[str] = []
+        try:
+            root = ET.fromstring(resp.text)
+            outer_data = root.find(".//params/param/value/array/data")
+            if outer_data is None:
+                return []
+            for torrent_val in outer_data.findall("value"):
+                inner_data = torrent_val.find("array/data")
+                if inner_data is None:
+                    continue
+                fields = inner_data.findall("value")
+                if len(fields) < 3:
+                    continue
+                h = (fields[0].findtext("string") or "").strip()
+                label = (fields[1].findtext("string") or "").strip()
+                complete = 0
+                for tag in ("i8", "i4", "int"):
+                    el = fields[2].find(tag)
+                    if el is not None:
+                        complete = int(el.text)
+                        break
+                if h and label == self._rt_imported_category and complete == 1:
+                    hashes.append(h)
+        except (ET.ParseError, ValueError) as exc:
+            logger.warning("[rtorrent] failed to parse seeding hashes: %s", exc)
+        return hashes
+
     # ------------------------------------------------------------------
     # SABnzbd
     # ------------------------------------------------------------------

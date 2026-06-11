@@ -316,6 +316,16 @@ async def admin_page(session=Depends(get_session)):
     return HTMLResponse(content=ADMIN_PAGE_HTML)
 
 
+@app.get("/portal/seeding", include_in_schema=False)
+async def get_seeding(session=Depends(get_session)):
+    try:
+        hashes = await download_client.get_seeding_hashes()
+    except Exception as exc:
+        logger.warning("get_seeding_hashes failed: %s", exc)
+        hashes = []
+    return JSONResponse({"seeding_hashes": hashes})
+
+
 @app.get("/portal/goodreads-profiles", include_in_schema=False)
 async def list_goodreads_profiles(session=Depends(get_session)):
     return JSONResponse({"profiles": history_db.get_goodreads_profiles()})

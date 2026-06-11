@@ -304,29 +304,36 @@ def qbt_set_category(info_hash: str, category: str, session: "_QbtSession"):
 # SABnzbd (sync HTTP)
 # ---------------------------------------------------------------------------
 
-def sab_is_complete(nzo_id: str) -> tuple[bool, Optional[str]]:
-    """
-    Return (complete, storage_path).
+_SAB_FAILED_STATUSES = {"Failed", "Aborted"}
 
-    Searches both the history and active queue. Returns (True, path) when done,
-    (False, None) when still downloading or not found.
+
+def sab_is_complete(nzo_id: str) -> tuple[bool, Optional[str], Optional[str]]:
+    """
+    Return (complete, storage_path, error_message).
+
+    Returns (True, path, None) on success, (False, None, msg) on failure,
+    (False, None, None) when still in progress or not found.
     """
     base = settings.sabnzbd_base_url.rstrip("/")
     api_key = settings.sabnzbd_api_key
 
-    # Check history — SABnzbd's `search` filters by name, not nzo_id, so fetch
-    # and filter in Python.
     url = f"{base}/api?apikey={api_key}&output=json&mode=history&limit=200"
     try:
         with urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read())
         for slot in data.get("history", {}).get("slots", []):
-            if slot.get("nzo_id") == nzo_id and slot.get("status") == "Completed":
-                return True, slot.get("storage")
+            if slot.get("nzo_id") != nzo_id:
+                continue
+            status = slot.get("status", "")
+            if status == "Completed":
+                return True, slot.get("storage"), None
+            if status in _SAB_FAILED_STATUSES:
+                msg = slot.get("fail_message") or f"SABnzbd status: {status}"
+                return False, None, msg
     except Exception as exc:
         logger.warning("[sabnzbd] history check failed for %s: %s", nzo_id, exc)
 
-    return False, None
+    return False, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +450,11 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
             logger.info("[watcher] %r complete — importing %s", title, book_file.name)
 
     elif protocol == "usenet":
-        complete, storage = sab_is_complete(download_id)
+        complete, storage, sab_error = sab_is_complete(download_id)
+        if sab_error:
+            logger.warning("[watcher] SABnzbd failure for %r: %s", title, sab_error)
+            db.update_download_status(record_id, "error", f"SABnzbd: {sab_error}")
+            return
         if not complete:
             logger.debug("[watcher] %r still downloading (usenet)", title)
             return
