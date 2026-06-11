@@ -364,6 +364,8 @@ async def health():
 
 @app.get("/", include_in_schema=False)
 async def root_redirect():
+    if _static_dir.is_dir():
+        return FileResponse(_static_dir / "index.html")
     return RedirectResponse(url="/portal", status_code=302)
 
 
