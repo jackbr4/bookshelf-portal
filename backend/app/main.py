@@ -103,11 +103,16 @@ def _title_variants(title: str) -> set[str]:
     variants.add(_norm(no_parens))
     variants.add(_norm(no_parens.split(":")[0].strip()))
     variants.add(_norm(title.split(":")[0].strip()))
+    # Strip leading articles so "Deer Park" matches "The Deer Park" and vice versa
+    for v in list(variants):
+        stripped = re.sub(r"^(?:the|a|an) ", "", v).strip()
+        if stripped:
+            variants.add(stripped)
     variants.discard("")
     return variants
 
 
-async def _check_in_calibre(title: str, author: str) -> bool:
+async def _check_in_calibre(title: str, author: str) -> Optional[str]:
     try:
         library = await asyncio.get_event_loop().run_in_executor(
             None, calibre_library.get_library_books
@@ -117,17 +122,17 @@ async def _check_in_calibre(title: str, author: str) -> bool:
         for book in library:
             if _title_variants(book["title"]) & cands:
                 if not an_words or set(_norm(book["author"]).split()) == an_words:
-                    return True
+                    return book["title"]
     except Exception as exc:
         logger.warning("Calibre presence check failed: %s", exc)
-    return False
+    return None
 
 
-async def _check_in_audiobooks(title: str, author: str) -> bool:
+async def _check_in_audiobooks(title: str, author: str) -> Optional[str]:
     try:
         ab_dir = Path(settings.audiobooks_dir)
         if not ab_dir.is_dir():
-            return False
+            return None
         cands = _title_variants(title)
         an_words = set(_norm(author).split()) if author.strip() else set()
         for entry in ab_dir.iterdir():
@@ -138,14 +143,16 @@ async def _check_in_audiobooks(title: str, author: str) -> bool:
             parts = normed.split(" - ", 1)
             dir_title_variants = _title_variants(parts[-1]) if parts else set()
             if dir_title_variants & cands:
+                orig_parts = entry.name.split(" - ", 1)
+                matched_title = orig_parts[-1].strip() if len(orig_parts) > 1 else entry.name
                 if not an_words:
-                    return True
+                    return matched_title
                 dir_author = _norm(parts[0]) if len(parts) == 2 else ""
                 if set(dir_author.split()) == an_words:
-                    return True
+                    return matched_title
     except Exception as exc:
         logger.warning("Audiobooks presence check failed: %s", exc)
-    return False
+    return None
 
 
 @app.post("/portal/auth", response_model=AuthResponse)
@@ -269,7 +276,7 @@ async def get_releases(
     a = author.strip()
     logger.info("Release search: title=%r author=%r", t, a)
     try:
-        (eb_acc, eb_rej), (ab_acc, ab_rej), in_cal, in_ab = await asyncio.gather(
+        (eb_acc, eb_rej), (ab_acc, ab_rej), cal_title, ab_title = await asyncio.gather(
             prowlarr.search_releases(t, a, content_type="ebook"),
             prowlarr.search_releases(t, a, content_type="audiobook"),
             _check_in_calibre(t, a),
@@ -280,8 +287,8 @@ async def get_releases(
             ebook_rejected=[ReleaseItem(**r.to_dict()) for r in eb_rej],
             audiobook_accepted=[ReleaseItem(**r.to_dict()) for r in ab_acc],
             audiobook_rejected=[ReleaseItem(**r.to_dict()) for r in ab_rej],
-            in_calibre=in_cal,
-            in_audiobooks=in_ab,
+            calibre_title=cal_title,
+            audiobooks_title=ab_title,
         )
     except Exception as e:
         logger.error("Release search error: %s", e)

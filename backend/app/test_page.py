@@ -939,8 +939,8 @@ TEST_PAGE_HTML = """<!DOCTYPE html>
 
       // Library presence notices
       const notices = [];
-      if (data.in_calibre)    notices.push('This e-book is already in the library.');
-      if (data.in_audiobooks) notices.push('This audio book is already in the library.');
+      if (data.calibre_title)    notices.push('The e-book “' + esc(data.calibre_title) + '” is already in your library.');
+      if (data.audiobooks_title) notices.push('The audio book “' + esc(data.audiobooks_title) + '” is already in Audiobookshelf.');
       const noticeEl = document.getElementById('library-notice');
       if (notices.length) {
         document.getElementById('library-notice-text').textContent = notices.join('  ');
