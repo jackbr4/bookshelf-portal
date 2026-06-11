@@ -370,6 +370,10 @@ _static_dir = Path(__file__).parent.parent / "static"
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
 
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        return FileResponse(_static_dir / "index.html")
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         candidate = _static_dir / full_path
