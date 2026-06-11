@@ -3,6 +3,8 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+ARG CACHE_BUST=dev
+RUN echo "$CACHE_BUST" > /dev/null
 RUN npm run build
 
 FROM python:3.12-slim
