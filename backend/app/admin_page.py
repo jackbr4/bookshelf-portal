@@ -103,7 +103,11 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       gap: 0.25rem;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
     }
+    .stat-card:hover { box-shadow: var(--shadow-md); }
+    .stat-card.stat-active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(13,110,253,0.15); }
     .stat-value {
       font-size: 2rem;
       font-weight: 700;
@@ -217,6 +221,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .chip-ebook      { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
     .chip-audiobook  { background: #DBEAFE; border-color: #BFDBFE; color: #1E40AF; }
     .chip-seeding    { background: #CCFBF1; border-color: #99F6E4; color: #0F766E; }
+    .chip-error      { background: var(--danger-bg); border-color: #FECACA; color: var(--danger-text); }
 
     /* ── History media filter ── */
     .history-filter {
@@ -281,6 +286,11 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .card-date {
       font-size: 0.72rem;
       color: var(--muted);
+      text-align: right;
+    }
+    .card-seedtime {
+      font-size: 0.68rem;
+      color: #0D9488;
       text-align: right;
     }
 
@@ -503,23 +513,23 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
   <!-- History tab -->
   <div id="panel-history" class="tab-panel">
     <div class="stats-row">
-      <div class="stat-card">
+      <div class="stat-card stat-active" id="statcard-all" onclick="setStatFilter('all')">
         <div class="stat-value" id="stat-total">—</div>
         <div class="stat-label">Total requested</div>
       </div>
-      <div class="stat-card green">
+      <div class="stat-card green" id="statcard-imported" onclick="setStatFilter('imported')">
         <div class="stat-value" id="stat-imported">—</div>
         <div class="stat-label">In Library</div>
       </div>
-      <div class="stat-card blue">
+      <div class="stat-card blue" id="statcard-active" onclick="setStatFilter('active')">
         <div class="stat-value" id="stat-active">—</div>
         <div class="stat-label">In progress</div>
       </div>
-      <div class="stat-card red">
+      <div class="stat-card red" id="statcard-errors" onclick="setStatFilter('errors')">
         <div class="stat-value" id="stat-errors">—</div>
         <div class="stat-label">Errors</div>
       </div>
-      <div class="stat-card teal">
+      <div class="stat-card teal" id="statcard-seeding" onclick="setStatFilter('seeding')">
         <div class="stat-value" id="stat-seeding">—</div>
         <div class="stat-label">Seeding</div>
       </div>
@@ -619,8 +629,10 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
   // ── History tab ────────────────────────────────────────────────────────────
 
   let _allHistoryItems = [];
-  let _historyFilter   = 'all';
+  let _historyFilter   = 'all';      // secondary: all / ebook / audiobook
+  let _statFilter      = 'all';      // primary:   all / imported / active / errors / seeding
   let _seedingHashes   = new Set();
+  let _seedingInfo     = {};         // uppercase hash → { finished_at: unix_ts }
 
   async function load() {
     try {
@@ -631,7 +643,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       _allHistoryItems = data.items || [];
       renderStats(_allHistoryItems);
       document.getElementById('history-filter-bar').style.display = _allHistoryItems.length ? '' : 'none';
-      applyHistoryFilter();
+      applyFilters();
       loadSeedingStatus();
     } catch (e) {
       document.getElementById('history-section').innerHTML =
@@ -644,9 +656,15 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       const resp = await fetch('/portal/seeding', { credentials: 'include' });
       if (!resp.ok) return;
       const data = await resp.json();
-      _seedingHashes = new Set((data.seeding_hashes || []).map(h => h.toUpperCase()));
+      _seedingHashes = new Set();
+      _seedingInfo = {};
+      for (const entry of (data.seeding || [])) {
+        const h = entry.hash.toUpperCase();
+        _seedingHashes.add(h);
+        _seedingInfo[h] = { finished_at: entry.finished_at || 0 };
+      }
       renderStats(_allHistoryItems);
-      applyHistoryFilter();
+      applyFilters();
     } catch (e) {
       // Best-effort — ignore failures
     }
@@ -663,22 +681,73 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     document.getElementById('stat-seeding').textContent  = seedingCount;
   }
 
+  function setStatFilter(f) {
+    _statFilter = f;
+    ['all','imported','active','errors','seeding'].forEach(k => {
+      document.getElementById('statcard-' + k)?.classList.toggle('stat-active', k === f);
+    });
+    applyFilters();
+  }
+
   function setHistoryFilter(f) {
     _historyFilter = f;
     document.querySelectorAll('.filter-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.filter === f)
     );
-    applyHistoryFilter();
+    applyFilters();
   }
 
-  function applyHistoryFilter() {
+  function applyFilters() {
     let items = _allHistoryItems;
+
+    // Primary: stat card filter
+    if (_statFilter === 'imported') {
+      items = items.filter(i => i.status === 'imported');
+    } else if (_statFilter === 'active') {
+      items = items.filter(i => i.status === 'downloading' || i.status === 'importing');
+    } else if (_statFilter === 'errors') {
+      items = items.filter(i => i.status === 'error');
+    } else if (_statFilter === 'seeding') {
+      items = items.filter(i =>
+        i.protocol === 'torrent' && _seedingHashes.has((i.download_id || '').toUpperCase())
+      );
+    }
+
+    // Secondary: media type filter
     if (_historyFilter === 'ebook') {
       items = items.filter(i => i.media_type === 'ebook' || !i.media_type);
     } else if (_historyFilter === 'audiobook') {
       items = items.filter(i => i.media_type === 'audiobook');
     }
+
     renderHistoryList(items);
+  }
+
+  // Returns short error type label from the stored error string
+  function errorTypeLabel(error) {
+    if (!error) return null;
+    const e = error.toLowerCase();
+    if (e.startsWith('sabnzbd:')) return 'SABnzbd';
+    if (e.includes('calibre')) return 'Calibre';
+    if (e.includes('no epub') || e.includes('no pdf') || e.includes('no audio file')) return 'missing file';
+    if (e.includes('copy failed')) return 'copy failed';
+    if (e.includes('no storage')) return 'no storage';
+    return 'error';
+  }
+
+  // Returns "Xd Yh left" or "Ready for cleanup" based on cleanup.py default of 12 weeks
+  function formatSeedTimeLeft(finished_at) {
+    if (!finished_at) return null;
+    const CLEANUP_SECS = 12 * 7 * 24 * 3600;
+    const removeAt = finished_at + CLEANUP_SECS;
+    const secondsLeft = removeAt - Date.now() / 1000;
+    if (secondsLeft <= 0) return 'Ready for cleanup';
+    const days  = Math.floor(secondsLeft / 86400);
+    const hours = Math.floor((secondsLeft % 86400) / 3600);
+    const mins  = Math.floor((secondsLeft % 3600) / 60);
+    if (days > 0)  return days + 'd ' + hours + 'h left';
+    if (hours > 0) return hours + 'h ' + mins + 'm left';
+    return mins + 'm left';
   }
 
   function renderHistoryList(items) {
@@ -686,11 +755,13 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     const count = items.length;
 
     if (!count) {
-      const emptyMsg = _historyFilter === 'audiobook'
-        ? 'No audio book downloads yet.'
-        : _historyFilter === 'ebook'
-          ? 'No e-book downloads yet.'
-          : 'No downloads recorded yet.';
+      const emptyMsg = _statFilter !== 'all'
+        ? 'No items match this filter.'
+        : _historyFilter === 'audiobook'
+          ? 'No audio book downloads yet.'
+          : _historyFilter === 'ebook'
+            ? 'No e-book downloads yet.'
+            : 'No downloads recorded yet.';
       section.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>'
         + '<p>' + emptyMsg + '</p></div>';
       return;
@@ -726,11 +797,20 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
           ? '<span class="chip chip-audiobook">audio book</span>'
           : '';
 
-      const isSeeding = item.protocol === 'torrent'
-        && _seedingHashes.has((item.download_id || '').toUpperCase());
+      const h = (item.download_id || '').toUpperCase();
+      const isSeeding = item.protocol === 'torrent' && _seedingHashes.has(h);
       const seedingChip = isSeeding
         ? '<span class="chip chip-seeding">seeding</span>'
         : '';
+
+      const errType = item.status === 'error' ? errorTypeLabel(item.error) : null;
+      const errChip = errType
+        ? '<span class="chip chip-error">' + esc(errType) + '</span>'
+        : '';
+
+      // Seed time left (only for seeding torrent cards with a known finish time)
+      const seedInfo = isSeeding ? _seedingInfo[h] : null;
+      const seedTimeStr = seedInfo ? formatSeedTimeLeft(seedInfo.finished_at) : null;
 
       html += '<div class="history-card ' + statusClass + '">';
 
@@ -745,12 +825,13 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
               + esc(item.release_title) + '</div>';
       }
 
-      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + mediaChip + seedingChip + '</div>';
+      html += '<div class="card-chips">' + protoChip + indexerChip + grChip + mediaChip + seedingChip + errChip + '</div>';
       html += '</div>';
 
       html += '<div class="card-right">'
             + '<span class="status-badge ' + badgeClass + '">' + esc(statusLabel) + '</span>'
             + '<span class="card-date">' + fmtDate(item.created_at) + '</span>'
+            + (seedTimeStr ? '<span class="card-seedtime">Seed: ' + esc(seedTimeStr) + '</span>' : '')
             + '</div>';
 
       if (item.error) {

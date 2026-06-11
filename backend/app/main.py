@@ -319,11 +319,11 @@ async def admin_page(session=Depends(get_session)):
 @app.get("/portal/seeding", include_in_schema=False)
 async def get_seeding(session=Depends(get_session)):
     try:
-        hashes = await download_client.get_seeding_hashes()
+        items = await download_client.get_seeding_info()
     except Exception as exc:
-        logger.warning("get_seeding_hashes failed: %s", exc)
-        hashes = []
-    return JSONResponse({"seeding_hashes": hashes})
+        logger.warning("get_seeding_info failed: %s", exc)
+        items = []
+    return JSONResponse({"seeding": items})
 
 
 @app.get("/portal/goodreads-profiles", include_in_schema=False)
