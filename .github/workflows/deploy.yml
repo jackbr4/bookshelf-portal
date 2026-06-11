@@ -48,6 +48,10 @@ jobs:
             fi
             podman rm -f bookshelf-request-portal || true
 
+            echo "Killing any process still holding port 8788..."
+            fuser -k 8788/tcp 2>/dev/null || lsof -ti:8788 | xargs kill -9 2>/dev/null || true
+            sleep 1
+
             echo "Starting new container..."
             podman run -d --name bookshelf-request-portal \
               --restart=always \

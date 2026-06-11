@@ -359,7 +359,7 @@ async def delete_goodreads_profile(profile_id: str, session=Depends(get_session)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "static_dir": str(_static_dir), "static_exists": _static_dir.is_dir()}
+    return {"status": "ok"}
 
 
 # Serve the built React frontend for all non-API routes (SPA fallback).
