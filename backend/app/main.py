@@ -301,19 +301,19 @@ async def get_history(session=Depends(get_session), limit: int = 500):
     return HistoryResponse(items=[HistoryItem(**i) for i in items])
 
 
-@app.get("/portal", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/portal", include_in_schema=False)
 async def portal_page():
-    return HTMLResponse(content=TEST_PAGE_HTML)
+    return RedirectResponse(url="/request", status_code=301)
 
 
 @app.get("/portal/test", include_in_schema=False)
 async def portal_test_redirect():
-    return RedirectResponse(url="/portal", status_code=301)
+    return RedirectResponse(url="/request", status_code=301)
 
 
-@app.get("/portal/admin", response_class=HTMLResponse, include_in_schema=False)
-async def admin_page(session=Depends(get_session)):
-    return HTMLResponse(content=ADMIN_PAGE_HTML)
+@app.get("/portal/admin", include_in_schema=False)
+async def admin_page_redirect():
+    return RedirectResponse(url="/admin", status_code=301)
 
 
 @app.get("/portal/seeding", include_in_schema=False)

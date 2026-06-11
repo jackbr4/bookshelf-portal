@@ -12,7 +12,7 @@ interface Props {
 
 export default function ReleaseResults({ results, searchTitle, searchAuthor, onDownload }: Props) {
   const [activeTab, setActiveTab] = useState<MediaType>('ebook')
-  const [viewMode, setViewMode] = useState<ViewMode>('detailed')
+  const [viewMode, setViewMode] = useState<ViewMode>('simple')
   const [downloadingGuid, setDownloadingGuid] = useState<string | null>(null)
 
   const ebookCount = results.ebookAccepted.length
