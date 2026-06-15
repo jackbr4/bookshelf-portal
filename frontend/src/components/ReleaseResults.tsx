@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { MediaType, ReleasesResponse, ReleaseItem, ViewMode } from '../lib/types'
 import ReleaseCard from './ReleaseCard'
-import PortalButton from './PortalButton'
 
 interface Props {
   results: ReleasesResponse
@@ -74,12 +73,7 @@ export default function ReleaseResults({ results, searchTitle, searchAuthor, onD
       <div className="release-toolbar">
         <p className="release-toolbar__summary">{summary}</p>
         <div className="release-toolbar__actions">
-          {rejected.length > 0 && (
-            <PortalButton variant="ghost" size="sm" type="button" disabled>
-              × Clear
-            </PortalButton>
-          )}
-          <div className="view-toggle">
+<div className="view-toggle">
             <button
               type="button"
               className={`view-toggle__btn ${viewMode === 'simple' ? 'view-toggle__btn--active' : ''}`}
