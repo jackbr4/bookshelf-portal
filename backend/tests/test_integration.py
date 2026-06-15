@@ -31,16 +31,16 @@ def test_health():
     assert r.json() == {"status": "ok"}
 
 
-def test_portal_page_loads():
-    r = httpx.get(f"{BASE}/portal")
-    assert r.status_code == 200
-    assert "Book Request Portal" in r.text
+def test_portal_redirects_to_request():
+    r = httpx.get(f"{BASE}/portal", follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"].endswith("/request")
 
 
 def test_portal_test_redirects():
     r = httpx.get(f"{BASE}/portal/test", follow_redirects=False)
     assert r.status_code == 301
-    assert r.headers["location"].endswith("/portal")
+    assert r.headers["location"].endswith("/request")
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -68,7 +68,6 @@ def test_logout():
 @pytest.mark.parametrize("method,path,kwargs", [
     ("GET",  "/portal/releases", {"params": {"title": "test"}}),
     ("GET",  "/portal/history",  {}),
-    ("GET",  "/portal/admin",    {}),
     ("POST", "/portal/download", {"json": {
         "title": "t", "author": "a", "release_title": "t",
         "indexer": "i", "protocol": "torrent",
