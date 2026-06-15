@@ -7,6 +7,8 @@ interface Props {
   onTitleChange: (value: string) => void
   onAuthorChange: (value: string) => void
   onSearch: () => void
+  onClear?: () => void
+  hasResults?: boolean
   loading: boolean
   error?: string
 }
@@ -17,6 +19,8 @@ export default function SearchCard({
   onTitleChange,
   onAuthorChange,
   onSearch,
+  onClear,
+  hasResults,
   loading,
   error,
 }: Props) {
@@ -60,9 +64,16 @@ export default function SearchCard({
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
           />
         </div>
-        <PortalButton variant="primary" size="md" loading={loading} onClick={handleSearch}>
-          Search
-        </PortalButton>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <PortalButton variant="primary" size="md" loading={loading} onClick={handleSearch}>
+            Search
+          </PortalButton>
+          {hasResults && onClear && (
+            <PortalButton variant="ghost" size="md" type="button" onClick={onClear}>
+              × Clear
+            </PortalButton>
+          )}
+        </div>
       </div>
 
       {(showError || error) && (

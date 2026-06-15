@@ -51,6 +51,15 @@ export default function RequestRoute() {
     }
   }, [title, author, navigate])
 
+  function handleClear() {
+    setTitle('')
+    setAuthor('')
+    setResults(null)
+    setSearchError(null)
+    setLastTitle('')
+    setLastAuthor('')
+  }
+
   const handleDownload = useCallback(async (release: ReleaseItem, mediaType: MediaType) => {
     try {
       const res = await downloadRelease({
@@ -98,6 +107,8 @@ export default function RequestRoute() {
           onTitleChange={setTitle}
           onAuthorChange={setAuthor}
           onSearch={handleSearch}
+          onClear={handleClear}
+          hasResults={!!results}
           loading={searching}
           error={searchError ?? undefined}
         />
