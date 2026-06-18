@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import PortalButton from './PortalButton'
 
 interface Props {
@@ -25,6 +25,12 @@ export default function SearchCard({
   error,
 }: Props) {
   const [touched, setTouched] = useState(false)
+  const titleRef = useRef<HTMLInputElement>(null)
+
+  function handleClear() {
+    onClear?.()
+    titleRef.current?.focus()
+  }
 
   function handleSearch() {
     setTouched(true)
@@ -45,6 +51,7 @@ export default function SearchCard({
         <div>
           <label className="field-label" htmlFor="search-title">Title</label>
           <input
+            ref={titleRef}
             id="search-title"
             className="field-input"
             placeholder="e.g. A Children's Bible"
@@ -69,7 +76,7 @@ export default function SearchCard({
             Search
           </PortalButton>
           {hasResults && onClear && (
-            <PortalButton variant="ghost" size="md" type="button" onClick={onClear}>
+            <PortalButton variant="ghost" size="md" type="button" onClick={handleClear}>
               × Clear
             </PortalButton>
           )}
