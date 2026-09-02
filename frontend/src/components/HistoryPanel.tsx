@@ -1,4 +1,5 @@
 import type { HistoryItem, MediaFilter, SeedingItem, StatFilter } from '../lib/types'
+import { formatRemaining, MAM_WARN_SLOTS, useMamStatus } from '../lib/mamStatus'
 import {
   buildSeedingMap,
   computeMetrics,
@@ -69,6 +70,7 @@ export default function HistoryPanel({
             <div className="metric-card__label">{card.label}</div>
           </button>
         ))}
+        <MamSlotsCard />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -132,5 +134,53 @@ export default function HistoryPanel({
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * MAM slot headroom, shown alongside the history metrics. Not a filter —
+ * it's the same live status the header pill shows, in card form.
+ */
+function MamSlotsCard() {
+  const { status, error, blocked, secondsUntilFree } = useMamStatus()
+
+  let value: string
+  let valueClass = ''
+  let detail: string
+  let tone = ''
+
+  if (!status) {
+    value = '—'
+    detail = error ? 'Status unavailable' : 'Loading…'
+  } else if (status.unsatisfied == null) {
+    value = '—'
+    valueClass = 'metric-card__value--error'
+    detail = 'rTorrent unreachable · downloads paused'
+    tone = 'metric-card--danger'
+  } else if (blocked) {
+    value = '0'
+    valueClass = 'metric-card__value--error'
+    detail = secondsUntilFree != null
+      ? `${status.unsatisfied}/${status.limit} · next slot in ${formatRemaining(secondsUntilFree)}`
+      : `${status.unsatisfied}/${status.limit} · waiting for downloads`
+    tone = 'metric-card--danger'
+  } else {
+    value = String(status.slotsFree ?? '—')
+    const warn = status.slotsFree != null && status.slotsFree <= MAM_WARN_SLOTS
+    valueClass = warn ? 'metric-card__value--warning' : 'metric-card__value--teal'
+    detail = `${status.unsatisfied}/${status.limit} used`
+    tone = warn ? 'metric-card--warning' : ''
+  }
+
+  return (
+    <div
+      className={`metric-card metric-card--static ${tone}`}
+      title={status ? `Unsatisfied = downloading or seeded < 72h. Downloads pause at ${status.blockThreshold}.` : undefined}
+      data-testid="mam-slots-card"
+    >
+      <div className={`metric-card__value ${valueClass}`}>{value}</div>
+      <div className="metric-card__label">MAM SLOTS</div>
+      <div className="metric-card__detail">{detail}</div>
+    </div>
   )
 }

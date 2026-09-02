@@ -71,7 +71,7 @@ export default function AdminRoute() {
             className={`admin-tab ${tab === 'history' ? 'admin-tab--active' : ''}`}
             onClick={() => setTab('history')}
           >
-            History
+            Status
           </button>
           <button
             type="button"

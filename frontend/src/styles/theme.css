@@ -911,12 +911,18 @@ body {
 
 .admin-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 24px;
 }
 
 @media (max-width: 900px) {
+  .admin-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 576px) {
   .admin-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -928,6 +934,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 18px 16px 14px;
   cursor: pointer;
+  text-align: center;
 }
 
 .metric-card--active {
@@ -947,6 +954,28 @@ body {
 .metric-card__value--blue { color: var(--color-score); }
 .metric-card__value--error { color: var(--color-accent-secondary); }
 .metric-card__value--teal { color: var(--color-seeding); }
+.metric-card__value--warning { color: var(--color-warning); }
+
+.metric-card--static {
+  cursor: default;
+}
+
+.metric-card--warning {
+  background: var(--color-warning-bg);
+  border-color: #F3D48A;
+}
+
+.metric-card--danger {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+}
+
+.metric-card__detail {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--color-text-secondary);
+}
 
 .metric-card__label {
   margin-top: 8px;

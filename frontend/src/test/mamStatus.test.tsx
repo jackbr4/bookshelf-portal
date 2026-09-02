@@ -12,6 +12,7 @@ import { MamStatusProvider, formatRemaining, secondsUntil, MAM_POLL_INTERVAL_MS 
 import { MamBlockedBanner, MamStatusPill } from '../components/MamStatusBanner'
 import PortalHeader from '../components/PortalHeader'
 import ReleaseCard from '../components/ReleaseCard'
+import HistoryPanel from '../components/HistoryPanel'
 
 const NOW_MS = 1_800_000_000_000
 const NOW_S = NOW_MS / 1000
@@ -175,6 +176,43 @@ describe('MamStatusPill / MamBlockedBanner', () => {
     renderWithProvider(<PortalHeader title="Admin" showAdmin={false} onSignOut={() => {}} />)
     await screen.findByTestId('mam-banner')
     expect(screen.getByText('Admin')).toBeInTheDocument()
+  })
+})
+
+describe('MAM slots card on the admin Status tab', () => {
+  afterEach(() => {
+    vi.mocked(getMamStatus).mockReset()
+  })
+
+  function renderPanel() {
+    return renderWithProvider(
+      <HistoryPanel items={[]} seeding={[]} statFilter="all" mediaFilter="all" onStatFilterChange={() => {}} onMediaFilterChange={() => {}} />
+    )
+  }
+
+  it('shows free slots and usage in the normal state', async () => {
+    vi.mocked(getMamStatus).mockResolvedValue(status())
+    renderPanel()
+    const card = await screen.findByTestId('mam-slots-card')
+    await waitFor(() => expect(card).toHaveTextContent('45'))
+    expect(card).toHaveTextContent('MAM SLOTS')
+    expect(card).toHaveTextContent('100/150 used')
+    expect(card).not.toHaveClass('metric-card--warning')
+  })
+
+  it('goes amber when low and red with a countdown when blocked', async () => {
+    vi.mocked(getMamStatus).mockResolvedValue(status({ unsatisfied: 140, slotsFree: 5 }))
+    const { unmount } = renderPanel()
+    await waitFor(() => expect(screen.getByTestId('mam-slots-card')).toHaveClass('metric-card--warning'))
+    unmount()
+
+    vi.mocked(getMamStatus).mockResolvedValue(
+      status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: Date.now() / 1000 + 2 * 3600 + 14 * 60, serverTime: Date.now() / 1000 })
+    )
+    renderPanel()
+    const card = await screen.findByTestId('mam-slots-card')
+    await waitFor(() => expect(card).toHaveClass('metric-card--danger'))
+    expect(card).toHaveTextContent('150/150 · next slot in 2h 14m')
   })
 })
 
