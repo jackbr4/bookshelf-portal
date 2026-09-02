@@ -1,4 +1,4 @@
-import ImportBookCard from './ImportBookCard'
+import ImportBookCard, { topPicks, type BulkSelectionProps } from './ImportBookCard'
 import PortalButton from './PortalButton'
 import type { ImportResolveItem, ImportResolveStatus, MediaType, ReleaseItem } from '../lib/types'
 
@@ -6,12 +6,18 @@ interface Props {
   job: ImportResolveStatus
   downloadingGuid: string | null
   sentGuids: ReadonlySet<string>
+  bulk: BulkSelectionProps & {
+    running: { done: number; total: number } | null
+    onSelectAllEbooks: () => void
+    onClear: () => void
+    onDownloadSelected: () => void
+  }
   onDownload: (item: ImportResolveItem, release: ReleaseItem, mediaType: MediaType) => Promise<void>
   onBackToReview: () => void
   onStartOver: () => void
 }
 
-export default function ImportResults({ job, downloadingGuid, sentGuids, onDownload, onBackToReview, onStartOver }: Props) {
+export default function ImportResults({ job, downloadingGuid, sentGuids, bulk, onDownload, onBackToReview, onStartOver }: Props) {
   const pct = job.total ? Math.round((job.completed / job.total) * 100) : 0
   const counts = job.results.reduce(
     (acc, r) => ({ ...acc, [r.status]: (acc[r.status] ?? 0) + 1 }),
@@ -27,6 +33,15 @@ export default function ImportResults({ job, downloadingGuid, sentGuids, onDownl
         counts.error ? `${counts.error} failed` : null,
       ].filter(Boolean).join(' · ')
     : `Checking ${job.completed} of ${job.total}…`
+
+  // Rows that could be bulk-selected (not yet sent)
+  const selectable = job.results.flatMap(item =>
+    topPicks(item).filter(p => !sentGuids.has(p.release.guid))
+  )
+  const selectedCount = selectable.filter(p => bulk.selected.has(p.release.guid)).length
+  const allEbooksSelected = selectable
+    .filter(p => p.mediaType === 'ebook')
+    .every(p => bulk.selected.has(p.release.guid))
 
   return (
     <section data-testid="import-results">
@@ -51,6 +66,37 @@ export default function ImportResults({ job, downloadingGuid, sentGuids, onDownl
         >
           <div className={`import-progress__fill ${job.done ? 'import-progress__fill--done' : ''}`} style={{ width: `${pct}%` }} />
         </div>
+
+        {selectable.length > 0 && (
+          <div className="import-bulk" data-testid="import-bulk">
+            <div className="import-bulk__links">
+              {!allEbooksSelected && (
+                <button type="button" className="link-button" onClick={bulk.onSelectAllEbooks} disabled={!!bulk.running}>
+                  Select all ebooks
+                </button>
+              )}
+              {selectedCount > 0 && (
+                <button type="button" className="link-button" onClick={bulk.onClear} disabled={!!bulk.running}>
+                  Clear selection
+                </button>
+              )}
+              {selectedCount === 0 && allEbooksSelected && (
+                <span className="import-bulk__hint">Tick the releases you want, then download them together.</span>
+              )}
+            </div>
+            <PortalButton
+              variant="primary"
+              size="md"
+              disabled={selectedCount === 0}
+              loading={!!bulk.running}
+              onClick={bulk.onDownloadSelected}
+            >
+              {bulk.running
+                ? `Sending ${bulk.running.done} of ${bulk.running.total}…`
+                : `Download selected (${selectedCount})`}
+            </PortalButton>
+          </div>
+        )}
       </div>
 
       <div className="import-book-list">
@@ -60,6 +106,7 @@ export default function ImportResults({ job, downloadingGuid, sentGuids, onDownl
             item={item}
             downloadingGuid={downloadingGuid}
             sentGuids={sentGuids}
+            bulk={bulk}
             onDownload={onDownload}
           />
         ))}

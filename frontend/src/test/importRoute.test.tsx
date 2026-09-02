@@ -27,7 +27,7 @@ vi.mock('../lib/session', () => ({
   isSessionValid: vi.fn(() => true),
 }))
 
-import { ApiError, extractList, startResolve, getResolveStatus, cancelResolve, downloadRelease } from '../lib/api'
+import { ApiError, extractList, startResolve, getResolveStatus, cancelResolve, downloadRelease, getMamStatus } from '../lib/api'
 import ImportRoute, { RESOLVE_POLL_MS } from '../routes/ImportRoute'
 import { MamStatusProvider } from '../lib/mamStatus'
 
@@ -242,5 +242,101 @@ describe('ImportRoute — results stage', () => {
       }
     })
     expect(screen.getByTestId('import-summary')).toHaveTextContent('2 failed')
+  })
+})
+
+describe('ImportRoute — bulk download', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  const usenetAudio = { ...release, guid: 'u1', title: 'Piranesi [M4B]', protocol: 'usenet', indexer: 'NZBgeek' }
+  const stonerRelease = { ...release, guid: 'r2', title: 'Stoner [EPUB]' }
+
+  async function goToDoneResults() {
+    await goToReview()
+    vi.mocked(startResolve).mockResolvedValue({ jobId: 'jb', total: 2 })
+    vi.mocked(getResolveStatus).mockResolvedValue({ jobId: 'jb', done: true, total: 2, completed: 2, results: [
+      { index: 0, title: 'Piranesi', author: 'Susanna Clarke', status: 'available',
+        releases: { ...EMPTY, ebookAccepted: [release], audiobookAccepted: [usenetAudio] } },
+      { index: 1, title: 'Stoner', author: '', status: 'available',
+        releases: { ...EMPTY, ebookAccepted: [stonerRelease] } },
+    ] })
+    fireEvent.click(screen.getByRole('button', { name: 'Find availability (2)' }))
+    await screen.findByTestId('import-bulk')
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(3))
+  }
+
+  it('sends usenet always, torrents up to the fresh slot budget, and parks the rest', async () => {
+    await goToDoneResults()
+    // Only one torrent slot free right now
+    vi.mocked(getMamStatus).mockResolvedValue({
+      unsatisfied: 144, limit: 150, blockThreshold: 145, slotsFree: 1,
+      blocked: false, nextFreeAt: Date.now() / 1000 + 3 * 3600, serverTime: Date.now() / 1000,
+    })
+    vi.mocked(downloadRelease).mockResolvedValue({ ok: true, recordId: 'x', downloadId: 'y', message: 'Sent' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all ebooks' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select audiobook for Piranesi' }))
+    expect(screen.getByRole('button', { name: 'Download selected (3)' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected (3)' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Download selected (1)' })).toBeInTheDocument())
+    // Piranesi ebook (torrent, slot 1) + Piranesi audiobook (usenet, always) were sent, in list order
+    expect(vi.mocked(downloadRelease).mock.calls.map(c => c[0].releaseTitle)).toEqual(['Piranesi [EPUB]', 'Piranesi [M4B]'])
+    expect(screen.getAllByText('✓ Sent')).toHaveLength(2)
+    // Stoner (torrent) is parked, still selected
+    expect(screen.getByTestId('row-waiting')).toHaveTextContent('Waiting for slot')
+    expect(screen.getByRole('checkbox', { name: 'Select ebook for Stoner' })).toBeChecked()
+    expect(screen.getByRole('alert')).toHaveTextContent('Sent 2 downloads')
+    expect(screen.getByRole('alert')).toHaveTextContent('1 waiting for a MAM slot')
+  })
+
+  it('parks every torrent when the slot status cannot be verified (fail closed)', async () => {
+    await goToDoneResults()
+    vi.mocked(getMamStatus).mockResolvedValue({
+      unsatisfied: null, limit: 150, blockThreshold: 145, slotsFree: null,
+      blocked: true, nextFreeAt: null, serverTime: Date.now() / 1000,
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Select all ebooks' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected (2)' }))
+    await waitFor(() => expect(screen.getAllByTestId('row-waiting')).toHaveLength(2))
+    expect(downloadRelease).not.toHaveBeenCalled()
+    // Both the sitewide banner and the toast are alerts here; check the toast.
+    expect(document.querySelector('.portal-toast')).toHaveTextContent('Waiting for MAM slots')
+    expect(screen.getByTestId('mam-banner')).toHaveTextContent('MAM slot status unavailable')
+  })
+
+  it('stops sending torrents after a 429 mid-run and marks the row waiting', async () => {
+    await goToDoneResults()
+    vi.mocked(getMamStatus).mockResolvedValue({
+      unsatisfied: 100, limit: 150, blockThreshold: 145, slotsFree: 45,
+      blocked: false, nextFreeAt: Date.now() / 1000 + 3600, serverTime: Date.now() / 1000,
+    })
+    vi.mocked(downloadRelease).mockRejectedValueOnce(
+      new ApiError(429, 'paused', { message: 'paused', next_free_at: Date.now() / 1000 + 3600, unsatisfied: 150, limit: 150 })
+    ).mockResolvedValue({ ok: true, recordId: 'x', downloadId: 'y', message: 'Sent' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all ebooks' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected (2)' }))
+    await waitFor(() => expect(screen.getAllByTestId('row-waiting')).toHaveLength(2))
+    // Only the first attempt hit the API; the second torrent was parked without trying
+    expect(downloadRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('a single-row failure is reported inline and the rest still go', async () => {
+    await goToDoneResults()
+    vi.mocked(getMamStatus).mockResolvedValue({
+      unsatisfied: 100, limit: 150, blockThreshold: 145, slotsFree: 45,
+      blocked: false, nextFreeAt: null, serverTime: Date.now() / 1000,
+    })
+    vi.mocked(downloadRelease)
+      .mockRejectedValueOnce(new ApiError(502, 'Dispatch failed: boom', 'Dispatch failed: boom'))
+      .mockResolvedValue({ ok: true, recordId: 'x', downloadId: 'y', message: 'Sent' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all ebooks' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected (2)' }))
+    await waitFor(() => expect(screen.getByTestId('row-failed')).toHaveTextContent('Failed: Dispatch failed: boom'))
+    expect(screen.getAllByText('✓ Sent')).toHaveLength(1)
+    expect(screen.getByRole('alert')).toHaveTextContent('1 sent · 1 failed')
   })
 })

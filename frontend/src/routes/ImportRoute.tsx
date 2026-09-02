@@ -5,9 +5,11 @@ import PortalToast from '../components/PortalToast'
 import ImportInputCard, { type ImportInputMode } from '../components/ImportInputCard'
 import ImportReviewTable, { newRow, type ReviewRow } from '../components/ImportReviewTable'
 import ImportResults from '../components/ImportResults'
+import { topPicks } from '../components/ImportBookCard'
 import { extractList, extractErrorDetail, startResolve, getResolveStatus, cancelResolve, logout } from '../lib/api'
 import { clearSession } from '../lib/session'
 import { useDownloader } from '../hooks/useDownloader'
+import { useBulkDownload, type BulkTarget } from '../hooks/useBulkDownload'
 import type { ImportResolveItem, ImportResolveStatus, MediaType, ReleaseItem } from '../lib/types'
 
 type Stage = 'input' | 'review' | 'results'
@@ -17,7 +19,7 @@ export const RESOLVE_POLL_MS = 1500
 
 export default function ImportRoute() {
   const navigate = useNavigate()
-  const { toast, showToast, dismissToast, download } = useDownloader()
+  const { toast, showToast, dismissToast, download, dispatch } = useDownloader()
 
   const [stage, setStage] = useState<Stage>('input')
   const [inputMode, setInputMode] = useState<ImportInputMode>('url')
@@ -31,6 +33,8 @@ export default function ImportRoute() {
   const jobIdRef = useRef<string | null>(null)
   const [downloadingGuid, setDownloadingGuid] = useState<string | null>(null)
   const [sentGuids, setSentGuids] = useState<Set<string>>(() => new Set())
+  const markSent = useCallback((guid: string) => setSentGuids(prev => new Set(prev).add(guid)), [])
+  const bulk = useBulkDownload({ dispatch, showToast, onSent: markSent })
 
   const handleSessionExpired = useCallback(() => {
     clearSession()
@@ -145,6 +149,8 @@ export default function ImportRoute() {
 
   function handleStartOver() {
     stopJob()
+    bulk.cancel()
+    bulk.clear()
     setJob(null)
     setRows([])
     setSourceTitle(null)
@@ -154,6 +160,8 @@ export default function ImportRoute() {
 
   function handleBackToReview() {
     stopJob()
+    bulk.cancel()
+    bulk.clear()
     setJob(null)
     setStage('review')
   }
@@ -162,11 +170,25 @@ export default function ImportRoute() {
     setDownloadingGuid(release.guid)
     try {
       const ok = await download({ title: item.title, author: item.author, release, mediaType })
-      if (ok) setSentGuids(prev => new Set(prev).add(release.guid))
+      if (ok) {
+        markSent(release.guid)
+        bulk.toggle(release.guid, false)
+      }
     } finally {
       setDownloadingGuid(null)
     }
-  }, [download])
+  }, [download, markSent, bulk])
+
+  // Every selectable row across the job, in list order — the bulk queue.
+  const bulkTargets: BulkTarget[] = (job?.results ?? []).flatMap(item =>
+    topPicks(item).map(p => ({ item, title: item.title, author: item.author, release: p.release, mediaType: p.mediaType }))
+  )
+
+  function handleSelectAllEbooks() {
+    bulk.selectMany(
+      bulkTargets.filter(t => t.mediaType === 'ebook' && !sentGuids.has(t.release.guid)).map(t => t.release.guid)
+    )
+  }
 
   async function handleLogout() {
     stopJob()
@@ -210,6 +232,16 @@ export default function ImportRoute() {
             job={job}
             downloadingGuid={downloadingGuid}
             sentGuids={sentGuids}
+            bulk={{
+              selected: bulk.selected,
+              outcomes: bulk.outcomes,
+              waitingText: bulk.waitingText,
+              running: bulk.running,
+              onToggle: bulk.toggle,
+              onSelectAllEbooks: handleSelectAllEbooks,
+              onClear: bulk.clear,
+              onDownloadSelected: () => bulk.run(bulkTargets),
+            }}
             onDownload={handleDownload}
             onBackToReview={handleBackToReview}
             onStartOver={handleStartOver}

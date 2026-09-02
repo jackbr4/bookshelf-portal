@@ -21,8 +21,8 @@ interface MamStatusContextValue {
   secondsUntilFree: number | null
   /** (server clock − client clock) in seconds, captured at the last successful fetch. */
   serverOffsetSeconds: number
-  /** Force an immediate refresh (e.g. after a 429). */
-  refresh: () => Promise<void>
+  /** Force an immediate refresh (e.g. after a 429); resolves to the fresh status, or null if the fetch failed. */
+  refresh: () => Promise<MamStatus | null>
 }
 
 const defaultValue: MamStatusContextValue = {
@@ -31,7 +31,7 @@ const defaultValue: MamStatusContextValue = {
   blocked: false,
   secondsUntilFree: null,
   serverOffsetSeconds: 0,
-  refresh: async () => {},
+  refresh: async () => null,
 }
 
 const MamStatusContext = createContext<MamStatusContextValue>(defaultValue)
@@ -63,20 +63,22 @@ export function MamStatusProvider({ children }: { children: React.ReactNode }) {
   const offsetRef = useRef(0)
   const mounted = useRef(true)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<MamStatus | null> => {
     try {
       const s = await getMamStatus()
-      if (!mounted.current) return
+      if (!mounted.current) return s
       offsetRef.current = s.serverTime - Date.now() / 1000
       setStatus(s)
       setError(null)
       setNowMs(Date.now())
+      return s
     } catch (err: unknown) {
-      if (!mounted.current) return
+      if (!mounted.current) return null
       const msg = err instanceof Error ? err.message : String(err)
       // Session expiry is handled by the page's own API calls; don't
       // surface it as a slot-status problem.
       if (msg !== 'SESSION_EXPIRED') setError(msg || 'Could not load MAM status')
+      return null
     }
   }, [])
 

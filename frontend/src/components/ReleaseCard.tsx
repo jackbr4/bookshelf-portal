@@ -8,6 +8,10 @@ interface Props {
   downloading: boolean
   /** Already sent to the download client this session — button becomes a "Sent" marker. */
   sent?: boolean
+  /** Optional bulk-select checkbox rendered at the left edge. */
+  selection?: { checked: boolean; onChange: (checked: boolean) => void; label: string }
+  /** Bulk-dispatch outcome for this row, shown beside the action. */
+  rowState?: { kind: 'waiting'; text: string } | { kind: 'failed'; text: string } | null
   onDownload: (release: ReleaseItem) => void
 }
 
@@ -23,7 +27,7 @@ function formatMeta(release: ReleaseItem): string {
   return parts.join(' · ')
 }
 
-export default function ReleaseCard({ release, viewMode, downloading, sent = false, onDownload }: Props) {
+export default function ReleaseCard({ release, viewMode, downloading, sent = false, selection, rowState, onDownload }: Props) {
   const format = release.detectedFormat?.toUpperCase() ?? 'FILE'
   // Torrent dispatch is refused while MAM is at its slot cap; usenet never
   // counts against MAM so those buttons stay live.
@@ -34,7 +38,17 @@ export default function ReleaseCard({ release, viewMode, downloading, sent = fal
     : 'MAM download limit reached — torrent downloads are paused until a slot frees'
 
   return (
-    <article className="release-card">
+    <article className={`release-card ${selection && !sent ? 'release-card--selectable' : ''} ${selection?.checked ? 'release-card--selected' : ''}`}>
+      {selection && !sent && (
+        <input
+          type="checkbox"
+          className="release-card__check"
+          checked={selection.checked}
+          onChange={e => selection.onChange(e.target.checked)}
+          aria-label={selection.label}
+          disabled={downloading}
+        />
+      )}
       {viewMode === 'simple' ? (
         <div className="release-card__main release-card__main--simple">
           <span className="chip chip--format">{format}</span>
@@ -54,6 +68,14 @@ export default function ReleaseCard({ release, viewMode, downloading, sent = fal
       <div className="release-card__aside">
         {viewMode === 'detailed' && release.score > 0 && (
           <span className="release-card__score">{release.score}</span>
+        )}
+        {rowState && !sent && (
+          <span
+            className={`status-badge ${rowState.kind === 'waiting' ? 'status-badge--progress' : 'status-badge--error'}`}
+            data-testid={`row-${rowState.kind}`}
+          >
+            {rowState.text}
+          </span>
         )}
         {sent ? (
           <span className="status-badge" title="Sent to the download client">✓ Sent</span>

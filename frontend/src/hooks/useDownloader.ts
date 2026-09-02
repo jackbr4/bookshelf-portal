@@ -12,13 +12,22 @@ export interface DownloadTarget {
   mediaType: MediaType
 }
 
+export type DispatchResult =
+  | { ok: true; message: string }
+  | { ok: false; kind: 'blocked'; message: string; nextFreeAt: number | null }
+  | { ok: false; kind: 'duplicate'; message: string }
+  | { ok: false; kind: 'session' }
+  | { ok: false; kind: 'error'; message: string }
+
 /**
  * Shared "send a release to the download client" behaviour: toast on
  * success/failure, session-expiry redirect, and the MAM 429 handling
  * (countdown in the toast + immediate status refresh so the banner flips).
  *
- * Returns the toast state for the page to render, and `download`, which
- * resolves true on success and false on any handled failure.
+ * `download` does all of that and resolves true/false. `dispatch` is the
+ * silent building block (no toast) for callers that batch several sends
+ * and want to summarise themselves; it still redirects on session expiry
+ * and refreshes MAM status on a 429.
  */
 export function useDownloader() {
   const navigate = useNavigate()
@@ -41,7 +50,7 @@ export function useDownloader() {
     if (timer.current) clearTimeout(timer.current)
   }, [])
 
-  const download = useCallback(async ({ title, author, release, mediaType }: DownloadTarget): Promise<boolean> => {
+  const dispatch = useCallback(async ({ title, author, release, mediaType }: DownloadTarget): Promise<DispatchResult> => {
     try {
       const res = await downloadRelease({
         title,
@@ -52,46 +61,54 @@ export function useDownloader() {
         downloadUrl: release.downloadUrl,
         mediaType,
       })
-      showToast({ kind: 'success', message: 'Download started', subMessage: res.message })
-      return true
+      return { ok: true, message: res.message }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === 'SESSION_EXPIRED') {
         clearSession()
         navigate('/', { replace: true })
-        return false
+        return { ok: false, kind: 'session' }
       }
       const blocked = mamBlockedDetail(err)
       if (blocked) {
         // The backend refused the dispatch at MAM's slot cap. Pull fresh
-        // status so the sitewide banner flips immediately, and echo the
-        // countdown here, against the server clock.
+        // status so the sitewide banner flips immediately.
         mam.refresh()
-        const secs = secondsUntil(blocked.nextFreeAt, mam.serverOffsetSeconds)
+        return { ok: false, kind: 'blocked', message: msg, nextFreeAt: blocked.nextFreeAt }
+      }
+      const dup = alreadyInClientDetail(err)
+      if (dup) return { ok: false, kind: 'duplicate', message: dup.message }
+      return { ok: false, kind: 'error', message: msg || 'Please try again in a few minutes.' }
+    }
+  }, [navigate, mam])
+
+  const download = useCallback(async (target: DownloadTarget): Promise<boolean> => {
+    const result = await dispatch(target)
+    if (result.ok) {
+      showToast({ kind: 'success', message: 'Download started', subMessage: result.message })
+      return true
+    }
+    switch (result.kind) {
+      case 'session':
+        break
+      case 'blocked': {
+        const secs = secondsUntil(result.nextFreeAt, mam.serverOffsetSeconds)
         showToast({
           kind: 'error',
           message: 'MAM download limit reached — downloads are paused',
           subMessage: secs != null ? `Next slot frees in ${formatRemaining(secs)}.` : 'Waiting for current downloads to finish.',
         })
-        return false
+        break
       }
-      const dup = alreadyInClientDetail(err)
-      if (dup) {
-        showToast({
-          kind: 'info',
-          message: 'Already in rTorrent',
-          subMessage: dup.message,
-        })
-        return false
-      }
-      showToast({
-        kind: 'error',
-        message: 'Download failed',
-        subMessage: msg || 'Please try again in a few minutes.',
-      })
-      return false
+      case 'duplicate':
+        showToast({ kind: 'info', message: 'Already in rTorrent', subMessage: result.message })
+        break
+      case 'error':
+        showToast({ kind: 'error', message: 'Download failed', subMessage: result.message })
+        break
     }
-  }, [navigate, mam, showToast])
+    return false
+  }, [dispatch, mam, showToast])
 
-  return { toast, showToast, dismissToast, download }
+  return { toast, showToast, dismissToast, download, dispatch }
 }

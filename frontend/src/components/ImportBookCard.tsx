@@ -2,7 +2,15 @@ import { useState } from 'react'
 import ReleaseCard from './ReleaseCard'
 import ReleaseResults from './ReleaseResults'
 import { describeHistory } from '../lib/historyText'
+import type { RowOutcome } from '../hooks/useBulkDownload'
 import type { ImportResolveItem, MediaType, ReleaseItem } from '../lib/types'
+
+export interface BulkSelectionProps {
+  selected: ReadonlySet<string>
+  outcomes: ReadonlyMap<string, RowOutcome>
+  waitingText: string
+  onToggle: (guid: string, on: boolean) => void
+}
 
 interface Props {
   item: ImportResolveItem
@@ -10,7 +18,25 @@ interface Props {
   downloadingGuid: string | null
   /** guids already sent to the download client this session */
   sentGuids: ReadonlySet<string>
+  /** Bulk-select state for the top picks; omit to hide checkboxes. */
+  bulk?: BulkSelectionProps
   onDownload: (item: ImportResolveItem, release: ReleaseItem, mediaType: MediaType) => Promise<void>
+}
+
+/**
+ * The rows a book contributes to bulk selection: its best ebook and best
+ * audiobook. Only "available" books — in-library and previously-requested
+ * ones keep their releases behind the expander, where downloads are one at
+ * a time on purpose.
+ */
+export function topPicks(item: ImportResolveItem): Array<{ release: ReleaseItem; mediaType: MediaType }> {
+  if (item.status !== 'available') return []
+  const out: Array<{ release: ReleaseItem; mediaType: MediaType }> = []
+  const eb = item.releases?.ebookAccepted[0]
+  const ab = item.releases?.audiobookAccepted[0]
+  if (eb) out.push({ release: eb, mediaType: 'ebook' })
+  if (ab) out.push({ release: ab, mediaType: 'audiobook' })
+  return out
 }
 
 const STATUS_LABEL: Record<ImportResolveItem['status'], string> = {
@@ -22,13 +48,32 @@ const STATUS_LABEL: Record<ImportResolveItem['status'], string> = {
   error: 'Error',
 }
 
-export default function ImportBookCard({ item, downloadingGuid, sentGuids, onDownload }: Props) {
+export default function ImportBookCard({ item, downloadingGuid, sentGuids, bulk, onDownload }: Props) {
   const [showAll, setShowAll] = useState(false)
   const rel = item.releases
   const topEbook = rel?.ebookAccepted[0]
   const topAudio = rel?.audiobookAccepted[0]
   const totalAccepted = (rel?.ebookAccepted.length ?? 0) + (rel?.audiobookAccepted.length ?? 0)
   const hasReleases = totalAccepted > 0
+
+  function rowProps(release: ReleaseItem, mediaType: MediaType) {
+    if (!bulk) return {}
+    const outcome = bulk.outcomes.get(release.guid)
+    return {
+      selection: {
+        checked: bulk.selected.has(release.guid),
+        onChange: (on: boolean) => bulk.onToggle(release.guid, on),
+        label: `Select ${mediaType} for ${item.title}`,
+      },
+      rowState:
+        outcome?.kind === 'waiting'
+          ? { kind: 'waiting' as const, text: bulk.waitingText }
+          : outcome?.kind === 'failed'
+            ? { kind: 'failed' as const, text: `Failed: ${outcome.message}` }
+            : null,
+      downloading: downloadingGuid === release.guid || outcome?.kind === 'sending',
+    }
+  }
 
   return (
     <article className={`import-book import-book--${item.status}`} data-testid="import-book" data-status={item.status}>
@@ -84,6 +129,7 @@ export default function ImportBookCard({ item, downloadingGuid, sentGuids, onDow
                 downloading={downloadingGuid === topEbook.guid}
                 sent={sentGuids.has(topEbook.guid)}
                 onDownload={r => onDownload(item, r, 'ebook')}
+                {...rowProps(topEbook, 'ebook')}
               />
             </div>
           )}
@@ -96,6 +142,7 @@ export default function ImportBookCard({ item, downloadingGuid, sentGuids, onDow
                 downloading={downloadingGuid === topAudio.guid}
                 sent={sentGuids.has(topAudio.guid)}
                 onDownload={r => onDownload(item, r, 'audiobook')}
+                {...rowProps(topAudio, 'audiobook')}
               />
             </div>
           )}

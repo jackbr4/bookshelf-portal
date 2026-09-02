@@ -455,6 +455,23 @@ body {
   color: var(--color-accent);
 }
 
+.release-card--selectable {
+  grid-template-columns: auto 1fr auto;
+}
+
+.release-card__check {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.release-card--selected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(45, 107, 63, 0.12);
+}
+
 .release-card__aside {
   display: flex;
   flex-direction: column;
@@ -692,6 +709,37 @@ body {
 
 .import-progress__fill--done {
   background: var(--color-accent);
+}
+
+.import-bulk {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.import-bulk__links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.import-bulk__links .link-button {
+  font-size: 13px;
+}
+
+.import-bulk__links .link-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.import-bulk__hint {
+  color: var(--color-text-secondary);
 }
 
 .import-book-list {
