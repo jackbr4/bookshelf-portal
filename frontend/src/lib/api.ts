@@ -8,6 +8,9 @@ import type {
   ReleaseItem,
   MediaType,
   MamStatus,
+  ImportExtractResponse,
+  ImportResolveStatus,
+  ExtractErrorCode,
 } from './types';
 import {
   mockAuth,
@@ -19,6 +22,10 @@ import {
   mockAddGoodreadsProfile,
   mockDeleteGoodreadsProfile,
   mockGetMamStatus,
+  mockExtractList,
+  mockStartResolve,
+  mockGetResolveStatus,
+  mockCancelResolve,
 } from '../mocks/mockApi';
 
 const MOCK_MODE = import.meta.env.VITE_MOCK_MODE === 'true';
@@ -92,6 +99,18 @@ function mapRelease(r: any): ReleaseItem {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapReleases(data: any): ReleasesResponse {
+  return {
+    ebookAccepted: (data.ebook_accepted ?? []).map(mapRelease),
+    ebookRejected: (data.ebook_rejected ?? []).map(mapRelease),
+    audiobookAccepted: (data.audiobook_accepted ?? []).map(mapRelease),
+    audiobookRejected: (data.audiobook_rejected ?? []).map(mapRelease),
+    calibreTitle: data.calibre_title,
+    audiobooksTitle: data.audiobooks_title,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapHistoryItem(item: any): HistoryItem {
   return {
     id: item.id,
@@ -145,14 +164,7 @@ export async function getReleases(title: string, author: string): Promise<Releas
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await handleResponse<any>(res);
-  return {
-    ebookAccepted: (data.ebook_accepted ?? []).map(mapRelease),
-    ebookRejected: (data.ebook_rejected ?? []).map(mapRelease),
-    audiobookAccepted: (data.audiobook_accepted ?? []).map(mapRelease),
-    audiobookRejected: (data.audiobook_rejected ?? []).map(mapRelease),
-    calibreTitle: data.calibre_title,
-    audiobooksTitle: data.audiobooks_title,
-  };
+  return mapReleases(data);
 }
 
 export async function downloadRelease(args: {
@@ -263,4 +275,83 @@ export async function deleteGoodreadsProfile(profileId: string): Promise<void> {
       credentials: 'include',
     })
   );
+}
+
+// --- List import ---
+
+/** Extract the structured {code, message} from an extraction error, if that's what it is. */
+export function extractErrorDetail(err: unknown): { code: ExtractErrorCode; message: string } | null {
+  if (!(err instanceof ApiError)) return null;
+  const d = err.detail as { code?: string; message?: string } | null;
+  if (!d || typeof d !== 'object' || typeof d.code !== 'string') return null;
+  return { code: d.code as ExtractErrorCode, message: d.message ?? err.message };
+}
+
+export async function extractList(input: { url: string } | { text: string }): Promise<ImportExtractResponse> {
+  if (MOCK_MODE) return mockExtractList(input);
+  const res = await fetch('/portal/import/extract', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(input),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    books: (data.books ?? []).map((b: any) => ({
+      title: b.title ?? '',
+      author: b.author ?? '',
+      confidence: b.confidence === 'low' ? 'low' : 'high',
+    })),
+    source: data.source,
+    sourceTitle: data.source_title ?? null,
+  };
+}
+
+export async function startResolve(books: { title: string; author: string }[]): Promise<{ jobId: string; total: number }> {
+  if (MOCK_MODE) return mockStartResolve(books);
+  const res = await fetch('/portal/import/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ books }),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return { jobId: data.job_id, total: data.total };
+}
+
+export async function getResolveStatus(jobId: string): Promise<ImportResolveStatus> {
+  if (MOCK_MODE) return mockGetResolveStatus(jobId);
+  const res = await fetch(`/portal/import/resolve/${encodeURIComponent(jobId)}`, { credentials: 'include' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return {
+    jobId: data.job_id,
+    done: !!data.done,
+    total: data.total,
+    completed: data.completed,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    results: (data.results ?? []).map((r: any) => ({
+      index: r.index,
+      title: r.title,
+      author: r.author ?? '',
+      status: r.status,
+      releases: r.releases ? mapReleases(r.releases) : null,
+      error: r.error ?? null,
+    })),
+  };
+}
+
+export async function cancelResolve(jobId: string): Promise<void> {
+  if (MOCK_MODE) {
+    await mockCancelResolve(jobId);
+    return;
+  }
+  // Best-effort: the job may already have expired.
+  await fetch(`/portal/import/resolve/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  }).catch(() => undefined);
 }

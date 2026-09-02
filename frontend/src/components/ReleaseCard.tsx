@@ -6,6 +6,8 @@ interface Props {
   release: ReleaseItem
   viewMode: ViewMode
   downloading: boolean
+  /** Already sent to the download client this session — button becomes a "Sent" marker. */
+  sent?: boolean
   onDownload: (release: ReleaseItem) => void
 }
 
@@ -21,7 +23,7 @@ function formatMeta(release: ReleaseItem): string {
   return parts.join(' · ')
 }
 
-export default function ReleaseCard({ release, viewMode, downloading, onDownload }: Props) {
+export default function ReleaseCard({ release, viewMode, downloading, sent = false, onDownload }: Props) {
   const format = release.detectedFormat?.toUpperCase() ?? 'FILE'
   // Torrent dispatch is refused while MAM is at its slot cap; usenet never
   // counts against MAM so those buttons stay live.
@@ -50,16 +52,20 @@ export default function ReleaseCard({ release, viewMode, downloading, onDownload
         {viewMode === 'detailed' && release.score > 0 && (
           <span className="release-card__score">{release.score}</span>
         )}
-        <PortalButton
-          variant="primary"
-          size="sm"
-          loading={downloading}
-          disabled={slotBlocked}
-          title={slotBlocked ? 'MAM download limit reached — see the notice above for when downloads resume' : undefined}
-          onClick={() => onDownload(release)}
-        >
-          Download
-        </PortalButton>
+        {sent ? (
+          <span className="status-badge" title="Sent to the download client">✓ Sent</span>
+        ) : (
+          <PortalButton
+            variant="primary"
+            size="sm"
+            loading={downloading}
+            disabled={slotBlocked}
+            title={slotBlocked ? 'MAM download limit reached — see the notice above for when downloads resume' : undefined}
+            onClick={() => onDownload(release)}
+          >
+            Download
+          </PortalButton>
+        )}
       </div>
     </article>
   )

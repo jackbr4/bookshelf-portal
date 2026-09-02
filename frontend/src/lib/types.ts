@@ -94,3 +94,41 @@ export interface AuthResponse {
   sessionToken?: string;
   expiresAt?: string;
 }
+
+// --- List import ---
+
+export type Confidence = 'high' | 'low';
+
+export interface BookCandidate {
+  title: string;
+  author: string;
+  confidence: Confidence;
+}
+
+export interface ImportExtractResponse {
+  books: BookCandidate[];
+  source: 'url' | 'text';
+  sourceTitle?: string | null;
+}
+
+/** Stable codes from the backend's ExtractionError. */
+export type ExtractErrorCode = 'fetch_failed' | 'no_content' | 'not_configured' | 'llm_failed';
+
+export type ImportResolveItemStatus = 'pending' | 'in_library' | 'available' | 'not_found' | 'error';
+
+export interface ImportResolveItem {
+  index: number;
+  title: string;
+  author: string;
+  status: ImportResolveItemStatus;
+  releases?: ReleasesResponse | null;
+  error?: string | null;
+}
+
+export interface ImportResolveStatus {
+  jobId: string;
+  done: boolean;
+  total: number;
+  completed: number;
+  results: ImportResolveItem[];
+}

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import PasswordRoute from './routes/PasswordRoute'
 import RequestRoute from './routes/RequestRoute'
 import AdminRoute from './routes/AdminRoute'
+import ImportRoute from './routes/ImportRoute'
 import { isSessionValid } from './lib/session'
 import { MamStatusProvider } from './lib/mamStatus'
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route element={<AuthedLayout />}>
           <Route path="/request" element={<RequestRoute />} />
           <Route path="/admin" element={<AdminRoute />} />
+          <Route path="/import" element={<ImportRoute />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

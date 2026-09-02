@@ -7,12 +7,24 @@ interface Props {
   searchTitle: string
   searchAuthor: string
   onDownload: (release: ReleaseItem, mediaType: MediaType) => Promise<void>
+  /** Optional: let a parent own the in-flight guid (e.g. the import page tracks one across many cards). */
+  downloadingGuid?: string | null
+  /** Optional: releases already sent this session, shown as "Sent" instead of a button. */
+  sentGuids?: ReadonlySet<string>
 }
 
-export default function ReleaseResults({ results, searchTitle, searchAuthor, onDownload }: Props) {
+export default function ReleaseResults({
+  results,
+  searchTitle,
+  searchAuthor,
+  onDownload,
+  downloadingGuid: controlledDownloading,
+  sentGuids,
+}: Props) {
   const [activeTab, setActiveTab] = useState<MediaType>('ebook')
   const [viewMode, setViewMode] = useState<ViewMode>('simple')
-  const [downloadingGuid, setDownloadingGuid] = useState<string | null>(null)
+  const [localDownloading, setLocalDownloading] = useState<string | null>(null)
+  const downloadingGuid = controlledDownloading !== undefined ? controlledDownloading : localDownloading
 
   const ebookCount = results.ebookAccepted.length
   const audioCount = results.audiobookAccepted.length
@@ -25,11 +37,11 @@ export default function ReleaseResults({ results, searchTitle, searchAuthor, onD
   }, [accepted.length, rejected.length])
 
   async function handleDownload(release: ReleaseItem) {
-    setDownloadingGuid(release.guid)
+    setLocalDownloading(release.guid)
     try {
       await onDownload(release, activeTab)
     } finally {
-      setDownloadingGuid(null)
+      setLocalDownloading(null)
     }
   }
 
@@ -101,6 +113,7 @@ export default function ReleaseResults({ results, searchTitle, searchAuthor, onD
             release={release}
             viewMode={viewMode}
             downloading={downloadingGuid === release.guid}
+            sent={sentGuids?.has(release.guid) ?? false}
             onDownload={handleDownload}
           />
         ))}

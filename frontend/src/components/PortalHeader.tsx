@@ -5,11 +5,12 @@ import { MamBlockedBanner, MamStatusPill } from './MamStatusBanner'
 interface Props {
   title: string
   showAdmin?: boolean
+  showImport?: boolean
   backLink?: { to: string; label: string }
   onSignOut: () => void
 }
 
-export default function PortalHeader({ title, showAdmin = true, backLink, onSignOut }: Props) {
+export default function PortalHeader({ title, showAdmin = true, showImport = true, backLink, onSignOut }: Props) {
   return (
     <>
       <header className="portal-topbar">
@@ -23,6 +24,11 @@ export default function PortalHeader({ title, showAdmin = true, backLink, onSign
         </div>
         <div className="portal-topbar__actions">
           <MamStatusPill />
+          {showImport && (
+            <Link to="/import" style={{ textDecoration: 'none' }}>
+              <PortalButton variant="soft" size="sm" type="button">Import list</PortalButton>
+            </Link>
+          )}
           {showAdmin && (
             <Link to="/admin" style={{ textDecoration: 'none' }}>
               <PortalButton variant="soft" size="sm" type="button">Admin</PortalButton>

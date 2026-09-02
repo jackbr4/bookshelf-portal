@@ -8,6 +8,10 @@ import type {
   ReleaseItem,
   MediaType,
   MamStatus,
+  ImportExtractResponse,
+  ImportResolveStatus,
+  ImportResolveItem,
+  BookCandidate,
 } from '../lib/types';
 
 const MOCK_PASSWORD = 'family';
@@ -252,4 +256,98 @@ export async function mockGetMamStatus(): Promise<MamStatus> {
     nextFreeAt: MOCK_MAM_EXHAUSTED ? now + 2 * 3600 + 14 * 60 : now + 5 * 3600,
     serverTime: now,
   };
+}
+
+// --- List import ---
+
+// Same canned list as the backend mock; titles chosen so the fake resolve
+// below shows every status.
+const MOCK_CANDIDATES: BookCandidate[] = [
+  { title: 'The Left Hand of Darkness', author: 'Ursula K. Le Guin', confidence: 'high' },
+  { title: 'Piranesi', author: 'Susanna Clarke', confidence: 'high' },
+  { title: 'Weather', author: 'Jenny Offill', confidence: 'high' },
+  { title: 'Stoner', author: '', confidence: 'low' },
+  { title: 'A Visit from the Goon Squad', author: 'Jennifer Egan', confidence: 'low' },
+  { title: 'Lincoln in the Bardo', author: 'George Saunders', confidence: 'high' },
+  { title: 'Trust', author: 'Hernan Diaz', confidence: 'high' },
+];
+
+export async function mockExtractList(input: { url: string } | { text: string }): Promise<ImportExtractResponse> {
+  await delay(900);
+  if ('url' in input) {
+    return { books: [...MOCK_CANDIDATES], source: 'url', sourceTitle: 'Mock: 7 novels worth your time' };
+  }
+  return { books: [...MOCK_CANDIDATES], source: 'text', sourceTitle: null };
+}
+
+interface MockJob {
+  results: ImportResolveItem[];
+  startedAt: number;
+}
+
+const mockJobs = new Map<string, MockJob>();
+
+function mockRelease(guid: string, title: string, fmt: string, sizeMb: number, score: number, protocol = 'torrent'): ReleaseItem {
+  return {
+    guid,
+    title,
+    indexer: protocol === 'torrent' ? 'MyAnonamouse' : 'NZBgeek',
+    protocol,
+    sizeMb,
+    detectedFormat: fmt,
+    seeders: protocol === 'torrent' ? 42 : null,
+    ageDays: 120,
+    downloadUrl: `http://localhost:29254/${guid}`,
+    score,
+  };
+}
+
+/** Mirrors backend import_jobs._mock_resolve so both mock layers agree. */
+function mockResolveOne(item: ImportResolveItem): ImportResolveItem {
+  const h = Array.from(item.title.toLowerCase()).reduce((a, c) => a + c.charCodeAt(0), 0);
+  if (h % 10 === 3) return { ...item, status: 'error', error: 'Prowlarr search timed out (mock)' };
+  const empty: ReleasesResponse = { ebookAccepted: [], ebookRejected: [], audiobookAccepted: [], audiobookRejected: [] };
+  if (h % 5 === 0) return { ...item, status: 'not_found', releases: empty };
+  if (h % 4 === 0) return { ...item, status: 'in_library', releases: { ...empty, calibreTitle: item.title } };
+  const label = item.author ? `${item.title} by ${item.author}` : item.title;
+  return {
+    ...item,
+    status: 'available',
+    releases: {
+      ...empty,
+      ebookAccepted: [
+        mockRelease(`${h}-eb1`, `${label} [ENG / EPUB]`, 'EPUB', 1.8, 72),
+        mockRelease(`${h}-eb2`, `${label} [ENG / MOBI]`, 'MOBI', 2.1, 60),
+        mockRelease(`${h}-eb3`, `${label} (epub)`, 'EPUB', 1.6, 55, 'usenet'),
+      ],
+      audiobookAccepted: h % 2 === 0 ? [mockRelease(`${h}-ab1`, `${label} [ENG / M4B]`, 'M4B', 480.2, 64)] : [],
+    },
+  };
+}
+
+export async function mockStartResolve(books: { title: string; author: string }[]): Promise<{ jobId: string; total: number }> {
+  await delay(200);
+  const jobId = `mock-${Date.now()}`;
+  mockJobs.set(jobId, {
+    startedAt: Date.now(),
+    results: books.map((b, i) => ({ index: i, title: b.title, author: b.author, status: 'pending' })),
+  });
+  return { jobId, total: books.length };
+}
+
+export async function mockGetResolveStatus(jobId: string): Promise<ImportResolveStatus> {
+  await delay(100);
+  const job = mockJobs.get(jobId);
+  if (!job) throw new Error('Unknown or expired resolve job');
+  // Resolve ~one book per 700ms, three at a time, like the real semaphore.
+  const elapsed = Date.now() - job.startedAt;
+  const resolvedCount = Math.min(job.results.length, Math.floor(elapsed / 700) * 3);
+  const results = job.results.map((r, i) => (i < resolvedCount && r.status === 'pending' ? mockResolveOne(r) : r));
+  job.results = results;
+  const completed = results.filter(r => r.status !== 'pending').length;
+  return { jobId, done: completed === results.length, total: results.length, completed, results };
+}
+
+export async function mockCancelResolve(jobId: string): Promise<void> {
+  mockJobs.delete(jobId);
 }
