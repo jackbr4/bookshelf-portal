@@ -95,6 +95,7 @@ function mapRelease(r: any): ReleaseItem {
     score: r.score ?? 0,
     rejected: r.rejected,
     rejectReason: r.reject_reason,
+    alreadyRequested: !!r.already_requested,
   };
 }
 
@@ -107,7 +108,24 @@ function mapReleases(data: any): ReleasesResponse {
     audiobookRejected: (data.audiobook_rejected ?? []).map(mapRelease),
     calibreTitle: data.calibre_title,
     audiobooksTitle: data.audiobooks_title,
+    historyMatch: data.history_match
+      ? {
+          status: data.history_match.status,
+          createdAt: data.history_match.created_at,
+          releaseTitle: data.history_match.release_title ?? null,
+          mediaType: data.history_match.media_type ?? null,
+          protocol: data.history_match.protocol ?? null,
+        }
+      : null,
   };
+}
+
+/** The 409 from /portal/download when rTorrent already has the torrent. */
+export function alreadyInClientDetail(err: unknown): { message: string } | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const d = err.detail as { code?: string; message?: string } | null;
+  if (!d || typeof d !== 'object' || d.code !== 'already_in_client') return null;
+  return { message: d.message ?? err.message };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -100,6 +100,7 @@ resolver = BookResolver(
     prowlarr=prowlarr,
     calibre_library=calibre_library,
     audiobooks_dir=settings.audiobooks_dir,
+    history_db=history_db,
 )
 
 list_extractor = ListExtractor(
@@ -242,6 +243,17 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
         )
     except Exception as e:
         logger.error("Dispatch error: %s", e)
+        if "duplicate" in str(e).lower():
+            # rTorrent silently ignores a torrent it already has loaded; the
+            # client reports it as "no new hash". Tell the user what happened
+            # rather than a generic failure.
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "already_in_client",
+                    "message": "This torrent is already in rTorrent — it was requested before",
+                },
+            )
         raise HTTPException(status_code=502, detail=f"Dispatch failed: {e}")
 
 

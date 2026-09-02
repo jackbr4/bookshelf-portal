@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { downloadRelease, mamBlockedDetail } from '../lib/api'
+import { alreadyInClientDetail, downloadRelease, mamBlockedDetail } from '../lib/api'
 import { clearSession } from '../lib/session'
 import { formatRemaining, secondsUntil, useMamStatus } from '../lib/mamStatus'
 import type { MediaType, ReleaseItem, ToastState } from '../lib/types'
@@ -72,6 +72,15 @@ export function useDownloader() {
           kind: 'error',
           message: 'MAM download limit reached — downloads are paused',
           subMessage: secs != null ? `Next slot frees in ${formatRemaining(secs)}.` : 'Waiting for current downloads to finish.',
+        })
+        return false
+      }
+      const dup = alreadyInClientDetail(err)
+      if (dup) {
+        showToast({
+          kind: 'info',
+          message: 'Already in rTorrent',
+          subMessage: dup.message,
         })
         return false
       }

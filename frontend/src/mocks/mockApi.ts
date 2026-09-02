@@ -171,13 +171,27 @@ export async function mockGetReleases(title: string, author: string): Promise<Re
   await delay(900);
   const q = `${title} ${author}`.toLowerCase();
   const isBible = q.includes('bible') || q.includes('holy');
+  // "dune" simulates a book that was requested before: the top release is
+  // flagged and a history banner appears.
+  const isRequested = q.includes('dune');
   return {
-    ebookAccepted: isBible ? MOCK_EBOOK_RELEASES : MOCK_EBOOK_RELEASES.slice(0, 1),
+    ebookAccepted: isBible
+      ? MOCK_EBOOK_RELEASES
+      : [{ ...MOCK_EBOOK_RELEASES[0], alreadyRequested: isRequested }],
     ebookRejected: isBible ? [{ ...MOCK_EBOOK_RELEASES[0], guid: 'rej1', rejected: true, rejectReason: 'Too small' }] : [],
     audiobookAccepted: isBible ? MOCK_AUDIO_RELEASES : [],
     audiobookRejected: isBible ? [] : [],
     calibreTitle: null,
     audiobooksTitle: null,
+    historyMatch: isRequested
+      ? {
+          status: 'imported',
+          createdAt: new Date(Date.now() - 12 * 24 * 3600 * 1000).toISOString(),
+          releaseTitle: MOCK_EBOOK_RELEASES[0].title,
+          mediaType: 'ebook',
+          protocol: 'torrent',
+        }
+      : null,
   };
 }
 
@@ -269,6 +283,7 @@ const MOCK_CANDIDATES: BookCandidate[] = [
   { title: 'Stoner', author: '', confidence: 'low' },
   { title: 'A Visit from the Goon Squad', author: 'Jennifer Egan', confidence: 'low' },
   { title: 'Lincoln in the Bardo', author: 'George Saunders', confidence: 'high' },
+  { title: 'Bewilderment', author: 'Richard Powers', confidence: 'high' },
   { title: 'Trust', author: 'Hernan Diaz', confidence: 'high' },
 ];
 
@@ -310,17 +325,28 @@ function mockResolveOne(item: ImportResolveItem): ImportResolveItem {
   if (h % 5 === 0) return { ...item, status: 'not_found', releases: empty };
   if (h % 4 === 0) return { ...item, status: 'in_library', releases: { ...empty, calibreTitle: item.title } };
   const label = item.author ? `${item.title} by ${item.author}` : item.title;
+  const requested = h % 7 === 1;
+  const ebooks = [
+    { ...mockRelease(`${h}-eb1`, `${label} [ENG / EPUB]`, 'EPUB', 1.8, 72), alreadyRequested: requested },
+    mockRelease(`${h}-eb2`, `${label} [ENG / MOBI]`, 'MOBI', 2.1, 60),
+    mockRelease(`${h}-eb3`, `${label} (epub)`, 'EPUB', 1.6, 55, 'usenet'),
+  ];
   return {
     ...item,
-    status: 'available',
+    status: requested ? 'requested' : 'available',
     releases: {
       ...empty,
-      ebookAccepted: [
-        mockRelease(`${h}-eb1`, `${label} [ENG / EPUB]`, 'EPUB', 1.8, 72),
-        mockRelease(`${h}-eb2`, `${label} [ENG / MOBI]`, 'MOBI', 2.1, 60),
-        mockRelease(`${h}-eb3`, `${label} (epub)`, 'EPUB', 1.6, 55, 'usenet'),
-      ],
+      ebookAccepted: ebooks,
       audiobookAccepted: h % 2 === 0 ? [mockRelease(`${h}-ab1`, `${label} [ENG / M4B]`, 'M4B', 480.2, 64)] : [],
+      historyMatch: requested
+        ? {
+            status: 'downloading',
+            createdAt: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
+            releaseTitle: ebooks[0].title,
+            mediaType: 'ebook',
+            protocol: 'torrent',
+          }
+        : null,
     },
   };
 }

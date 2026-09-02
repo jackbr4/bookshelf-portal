@@ -165,6 +165,20 @@ class HistoryDB:
             ).fetchone()
         return dict(row) if row else None
 
+    def get_active_downloads(self) -> list[dict]:
+        """
+        Every download that was sent and didn't fail — i.e. anything that
+        might already be in rTorrent/SABnzbd or on the shelf. Used for the
+        "already requested" check before a user re-downloads a book.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, title, author, release_title, indexer, protocol, media_type, "
+                "status, created_at FROM downloads WHERE status != 'error' "
+                "ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def has_download_for_hash(self, download_id: str) -> bool:
         """True if any download record (any status) exists for this hash."""
         with self._conn() as conn:

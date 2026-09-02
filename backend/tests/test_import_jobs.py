@@ -188,7 +188,7 @@ def test_mock_mode_produces_a_mix_of_statuses_without_touching_prowlarr():
         titles = [f"Mock Book {i}" for i in range(20)]
         job = await _wait_done(store, store.create(_books(*titles)).id, timeout=30)
         statuses = {r.status for r in job.status().results}
-        assert statuses >= {"available", "not_found", "in_library"}
+        assert statuses >= {"available", "not_found", "in_library", "requested"}
         resolver.resolve_book.assert_not_awaited()
         available = [r for r in job.status().results if r.status == "available"]
         assert available and available[0].releases.ebook_accepted
@@ -197,3 +197,11 @@ def test_mock_mode_produces_a_mix_of_statuses_without_touching_prowlarr():
                    for r in available for rel in r.releases.ebook_accepted)
 
     asyncio.run(scenario())
+
+
+def test_status_for_requested_ranks_below_in_library_and_above_available():
+    from app.models import HistoryMatch
+    hm = HistoryMatch(status="downloading", created_at="2026-09-01T10:00:00+00:00")
+    assert _status_for(ReleasesResponse(history_match=hm, ebook_accepted=[_release()])) == "requested"
+    assert _status_for(ReleasesResponse(history_match=hm)) == "requested"
+    assert _status_for(ReleasesResponse(history_match=hm, calibre_title="Dune")) == "in_library"

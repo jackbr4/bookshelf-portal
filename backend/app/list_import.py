@@ -64,8 +64,8 @@ _OUTPUT_SCHEMA = {
 }
 
 # Titles are chosen so the mock resolve job (import_jobs._mock_resolve) shows
-# every outcome: available, in_library (Weather), not_found (Goon Squad) and
-# error (Lincoln in the Bardo).
+# every outcome: available, in_library (Weather), requested (Bewilderment),
+# not_found (Goon Squad) and error (Lincoln in the Bardo).
 MOCK_BOOKS = [
     BookCandidate(title="The Left Hand of Darkness", author="Ursula K. Le Guin", confidence="high"),
     BookCandidate(title="Piranesi", author="Susanna Clarke", confidence="high"),
@@ -73,6 +73,7 @@ MOCK_BOOKS = [
     BookCandidate(title="Stoner", author="", confidence="low"),
     BookCandidate(title="A Visit from the Goon Squad", author="Jennifer Egan", confidence="low"),
     BookCandidate(title="Lincoln in the Bardo", author="George Saunders", confidence="high"),
+    BookCandidate(title="Bewilderment", author="Richard Powers", confidence="high"),
     BookCandidate(title="Trust", author="Hernan Diaz", confidence="high"),
 ]
 

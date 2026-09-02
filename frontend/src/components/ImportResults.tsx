@@ -22,6 +22,7 @@ export default function ImportResults({ job, downloadingGuid, sentGuids, onDownl
     ? [
         counts.available ? `${counts.available} available` : null,
         counts.in_library ? `${counts.in_library} already in library` : null,
+        counts.requested ? `${counts.requested} already requested` : null,
         counts.not_found ? `${counts.not_found} not found` : null,
         counts.error ? `${counts.error} failed` : null,
       ].filter(Boolean).join(' · ')

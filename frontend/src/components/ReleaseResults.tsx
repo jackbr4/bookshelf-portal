@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { MediaType, ReleasesResponse, ReleaseItem, ViewMode } from '../lib/types'
 import ReleaseCard from './ReleaseCard'
+import { describeHistory } from '../lib/historyText'
 
 interface Props {
   results: ReleasesResponse
@@ -61,6 +62,14 @@ export default function ReleaseResults({
       )}
       {results.audiobooksTitle && activeTab === 'audiobook' && (
         <div className="library-banner">Already in Audiobookshelf: {results.audiobooksTitle}</div>
+      )}
+      {results.historyMatch && (
+        <div className="library-banner library-banner--history" data-testid="history-banner">
+          {describeHistory(results.historyMatch)}
+          {results.historyMatch.releaseTitle && (
+            <span className="library-banner__detail"> — {results.historyMatch.releaseTitle}</span>
+          )}
+        </div>
       )}
 
       <div className="release-tabs">

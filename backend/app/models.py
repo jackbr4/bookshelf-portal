@@ -78,6 +78,17 @@ class ReleaseItem(BaseModel):
     score: int = 0
     rejected: bool = False
     reject_reason: Optional[str] = None
+    # This exact release was already sent to the download client (per history.db)
+    already_requested: bool = False
+
+
+class HistoryMatch(BaseModel):
+    """A past download of (what looks like) the same book."""
+    status: str              # downloading | imported
+    created_at: str          # ISO-8601 UTC
+    release_title: Optional[str] = None
+    media_type: Optional[str] = None
+    protocol: Optional[str] = None
 
 
 class ReleasesResponse(BaseModel):
@@ -87,6 +98,8 @@ class ReleasesResponse(BaseModel):
     audiobook_rejected: List[ReleaseItem] = []
     calibre_title: Optional[str] = None
     audiobooks_title: Optional[str] = None
+    # Most recent non-failed download of this book, if any
+    history_match: Optional[HistoryMatch] = None
 
 
 class DownloadRequest(BaseModel):
@@ -161,7 +174,7 @@ class ImportResolveCreated(BaseModel):
     total: int
 
 
-ImportResolveItemStatus = Literal["pending", "in_library", "available", "not_found", "error"]
+ImportResolveItemStatus = Literal["pending", "in_library", "requested", "available", "not_found", "error"]
 
 
 class ImportResolveItem(BaseModel):

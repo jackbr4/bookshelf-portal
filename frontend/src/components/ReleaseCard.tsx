@@ -54,6 +54,17 @@ export default function ReleaseCard({ release, viewMode, downloading, sent = fal
         )}
         {sent ? (
           <span className="status-badge" title="Sent to the download client">✓ Sent</span>
+        ) : release.alreadyRequested && !downloading ? (
+          <div className="release-card__requested">
+            <span className="status-badge status-badge--progress" title="This release was already sent to the download client">
+              ↻ Already requested
+            </span>
+            {!slotBlocked && (
+              <button type="button" className="link-button release-card__anyway" onClick={() => onDownload(release)}>
+                Download anyway
+              </button>
+            )}
+          </div>
         ) : (
           <PortalButton
             variant="primary"

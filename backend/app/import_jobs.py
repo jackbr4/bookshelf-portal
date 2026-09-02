@@ -10,9 +10,11 @@ import asyncio
 import logging
 import secrets
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from .models import (
+    HistoryMatch,
     ImportBookInput,
     ImportResolveItem,
     ImportResolveStatus,
@@ -32,6 +34,8 @@ RESOLVE_CONCURRENCY = 3
 def _status_for(releases: ReleasesResponse) -> str:
     if releases.calibre_title or releases.audiobooks_title:
         return "in_library"
+    if releases.history_match is not None:
+        return "requested"
     if releases.ebook_accepted or releases.audiobook_accepted:
         return "available"
     return "not_found"
@@ -166,7 +170,8 @@ async def _mock_resolve(title: str, author: str) -> ReleasesResponse:
     """
     Deterministic fake results keyed off the title so the import page can be
     exercised locally: every 4th book is already in the library, every 5th
-    has nothing, one in ten errors out, the rest have releases.
+    has nothing, one in ten errors out, one in seven was requested before,
+    the rest have releases.
     """
     await asyncio.sleep(0.6 + (len(title) % 5) * 0.15)
     h = sum(ord(c) for c in title.lower())
@@ -177,7 +182,8 @@ async def _mock_resolve(title: str, author: str) -> ReleasesResponse:
     if h % 4 == 0:
         return ReleasesResponse(calibre_title=title, audiobooks_title=None)
     label = f"{title} by {author}" if author else title
-    return ReleasesResponse(
+    requested = h % 7 == 1
+    releases = ReleasesResponse(
         ebook_accepted=[
             _mock_release(f"{h}-eb1", f"{label} [ENG / EPUB]", "EPUB", 1.8, 72),
             _mock_release(f"{h}-eb2", f"{label} [ENG / MOBI]", "MOBI", 2.1, 60),
@@ -187,3 +193,13 @@ async def _mock_resolve(title: str, author: str) -> ReleasesResponse:
             [_mock_release(f"{h}-ab1", f"{label} [ENG / M4B]", "M4B", 480.2, 64)] if h % 2 == 0 else []
         ),
     )
+    if requested:
+        releases.ebook_accepted[0].already_requested = True
+        releases.history_match = HistoryMatch(
+            status="downloading",
+            created_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            release_title=releases.ebook_accepted[0].title,
+            media_type="ebook",
+            protocol="torrent",
+        )
+    return releases

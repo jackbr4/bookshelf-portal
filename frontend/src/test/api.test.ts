@@ -80,6 +80,25 @@ describe('api error handling', () => {
     expect(api.mamBlockedDetail(err)).toBeNull()
   })
 
+  it('recognises the rTorrent duplicate 409', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(409, {
+      detail: { code: 'already_in_client', message: 'This torrent is already in rTorrent — it was requested before' },
+    })))
+    const err = await api.downloadRelease(downloadArgs).catch((e: unknown) => e)
+    expect(api.alreadyInClientDetail(err)).toEqual({ message: 'This torrent is already in rTorrent — it was requested before' })
+    expect(api.mamBlockedDetail(err)).toBeNull()
+  })
+
+  it('maps history_match and already_requested from /portal/releases', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, {
+      ebook_accepted: [{ guid: 'g', title: 'T', indexer: 'I', protocol: 'torrent', size_mb: 1, download_url: 'u', already_requested: true }],
+      history_match: { status: 'imported', created_at: '2026-08-01T00:00:00+00:00', release_title: 'T', media_type: 'ebook', protocol: 'torrent' },
+    })))
+    const res = await api.getReleases('T', '')
+    expect(res.ebookAccepted[0].alreadyRequested).toBe(true)
+    expect(res.historyMatch).toEqual({ status: 'imported', createdAt: '2026-08-01T00:00:00+00:00', releaseTitle: 'T', mediaType: 'ebook', protocol: 'torrent' })
+  })
+
   it('still throws SESSION_EXPIRED on 401', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { detail: 'nope' })))
     await expect(api.downloadRelease(downloadArgs)).rejects.toThrow('SESSION_EXPIRED')

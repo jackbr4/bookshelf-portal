@@ -17,6 +17,17 @@ export interface ReleaseItem {
   score: number;
   rejected?: boolean;
   rejectReason?: string | null;
+  /** This exact release was already sent to the download client (per history). */
+  alreadyRequested?: boolean;
+}
+
+/** A past, non-failed download of (what looks like) the same book. */
+export interface HistoryMatch {
+  status: string; // downloading | imported
+  createdAt: string; // ISO-8601
+  releaseTitle?: string | null;
+  mediaType?: string | null;
+  protocol?: string | null;
 }
 
 export interface ReleasesResponse {
@@ -26,6 +37,7 @@ export interface ReleasesResponse {
   audiobookRejected: ReleaseItem[];
   calibreTitle?: string | null;
   audiobooksTitle?: string | null;
+  historyMatch?: HistoryMatch | null;
 }
 
 export interface DownloadResponse {
@@ -114,7 +126,7 @@ export interface ImportExtractResponse {
 /** Stable codes from the backend's ExtractionError. */
 export type ExtractErrorCode = 'fetch_failed' | 'no_content' | 'not_configured' | 'llm_failed';
 
-export type ImportResolveItemStatus = 'pending' | 'in_library' | 'available' | 'not_found' | 'error';
+export type ImportResolveItemStatus = 'pending' | 'in_library' | 'requested' | 'available' | 'not_found' | 'error';
 
 export interface ImportResolveItem {
   index: number;

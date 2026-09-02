@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ReleaseCard from './ReleaseCard'
 import ReleaseResults from './ReleaseResults'
+import { describeHistory } from '../lib/historyText'
 import type { ImportResolveItem, MediaType, ReleaseItem } from '../lib/types'
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 const STATUS_LABEL: Record<ImportResolveItem['status'], string> = {
   pending: 'Checking…',
   in_library: 'In library',
+  requested: 'Requested',
   available: 'Available',
   not_found: 'Not found',
   error: 'Error',
@@ -52,10 +54,22 @@ export default function ImportBookCard({ item, downloadingGuid, sentGuids, onDow
         <p className="import-book__note">No matching releases found. Try tweaking the title or author on the request page.</p>
       )}
 
-      {item.status === 'in_library' && rel && (
+      {/* Collapsed-state banners; the expanded ReleaseResults shows its own. */}
+      {item.status === 'in_library' && rel && !showAll && (
         <div className="import-book__library">
           {rel.calibreTitle && <div className="library-banner" style={{ marginTop: 0 }}>Already in Calibre: {rel.calibreTitle}</div>}
           {rel.audiobooksTitle && <div className="library-banner" style={{ marginTop: rel.calibreTitle ? 8 : 0 }}>Already in Audiobookshelf: {rel.audiobooksTitle}</div>}
+        </div>
+      )}
+
+      {item.status === 'requested' && rel?.historyMatch && !showAll && (
+        <div className="import-book__library">
+          <div className="library-banner library-banner--history" style={{ marginTop: 0 }} data-testid="history-banner">
+            {describeHistory(rel.historyMatch)}
+            {rel.historyMatch.releaseTitle && (
+              <span className="library-banner__detail"> — {rel.historyMatch.releaseTitle}</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -101,13 +115,13 @@ export default function ImportBookCard({ item, downloadingGuid, sentGuids, onDow
         </div>
       )}
 
-      {hasReleases && (item.status === 'available' || item.status === 'in_library') && (
+      {hasReleases && (item.status === 'available' || item.status === 'in_library' || item.status === 'requested') && (
         <button type="button" className="link-button import-book__toggle" onClick={() => setShowAll(v => !v)}>
           {showAll
             ? 'Show fewer'
-            : item.status === 'in_library'
-              ? `Show ${totalAccepted} release${totalAccepted === 1 ? '' : 's'} anyway`
-              : `Show all ${totalAccepted} release${totalAccepted === 1 ? '' : 's'}`}
+            : item.status === 'available'
+              ? `Show all ${totalAccepted} release${totalAccepted === 1 ? '' : 's'}`
+              : `Show ${totalAccepted} release${totalAccepted === 1 ? '' : 's'} anyway`}
         </button>
       )}
     </article>
