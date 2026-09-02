@@ -79,6 +79,45 @@ body {
   gap: 10px;
 }
 
+/* MAM blocked banner (sitewide, under the header) */
+.mam-banner {
+  background: var(--color-danger-bg);
+  border-bottom: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.mam-banner__inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: var(--admin-max);
+  margin: 0 auto;
+  padding: 14px 28px;
+}
+
+.mam-banner__icon {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.mam-banner__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mam-banner__body {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.mam-banner__countdown {
+  font-family: var(--font-data);
+  font-weight: 700;
+}
+
+
 
 
 .portal-btn {
@@ -1082,6 +1121,10 @@ body {
 @media (max-width: 576px) {
   .portal-topbar {
     padding: 0 16px;
+  }
+
+  .mam-banner__inner {
+    padding: 12px 16px;
   }
 
 
