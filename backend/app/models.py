@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from enum import Enum
 
 
@@ -124,3 +124,24 @@ class HistoryItem(BaseModel):
 
 class HistoryResponse(BaseModel):
     items: List[HistoryItem]
+
+
+# --- List import ---
+
+class ImportExtractRequest(BaseModel):
+    """Exactly one of url / text must be provided."""
+    url: Optional[str] = None
+    text: Optional[str] = None
+
+
+class BookCandidate(BaseModel):
+    title: str
+    author: str = ""
+    confidence: Literal["high", "low"] = "high"
+
+
+class ImportExtractResponse(BaseModel):
+    books: List[BookCandidate]
+    source: Literal["url", "text"]
+    # Page <title> (URL source) so the UI can label the list; None for pasted text.
+    source_title: Optional[str] = None

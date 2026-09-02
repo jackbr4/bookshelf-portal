@@ -22,6 +22,7 @@ from .prowlarr_client import ProwlarrClient
 from .download_client import DownloadClient
 from .mam_status import MamStatusService
 from .resolver import BookResolver
+from .list_import import ListExtractor, ExtractionError
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
@@ -29,6 +30,7 @@ from .models import (
     ReleasesResponse,
     DownloadRequest, DownloadResponse,
     HistoryItem, HistoryResponse,
+    ImportExtractRequest, ImportExtractResponse,
 )
 from .auth import get_session, create_session_token
 
@@ -96,6 +98,15 @@ resolver = BookResolver(
     prowlarr=prowlarr,
     calibre_library=calibre_library,
     audiobooks_dir=settings.audiobooks_dir,
+)
+
+list_extractor = ListExtractor(
+    api_key=settings.anthropic_api_key,
+    model=settings.extraction_model,
+    max_books=settings.list_import_max_books,
+    fetch_timeout=settings.list_import_fetch_timeout,
+    fetch_max_bytes=settings.list_import_fetch_max_bytes,
+    mock_mode=settings.mock_mode,
 )
 
 
@@ -253,6 +264,44 @@ async def get_releases(
 @app.get("/portal/mam-status")
 async def get_mam_status(session=Depends(get_session)):
     return JSONResponse(await mam_status_service.get_status())
+
+
+# ---------------------------------------------------------------------------
+# List import
+# ---------------------------------------------------------------------------
+
+# Extraction errors map to HTTP status by class. The detail is always
+# {code, message} so the UI can branch (e.g. offer the paste-text tab on
+# fetch_failed / no_content) while showing the message verbatim.
+_EXTRACTION_STATUS = {
+    "fetch_failed": 422,
+    "no_content": 422,
+    "not_configured": 503,
+    "llm_failed": 502,
+}
+
+
+@app.post("/portal/import/extract", response_model=ImportExtractResponse)
+@limiter.limit("5/minute")
+async def import_extract(body: ImportExtractRequest, request: Request, session=Depends(get_session)):
+    url = (body.url or "").strip()
+    text = (body.text or "").strip()
+    if bool(url) == bool(text):
+        raise HTTPException(status_code=400, detail="Provide exactly one of url or text")
+
+    try:
+        if url:
+            logger.info("List import (url): %s", url[:120])
+            books, source_title = await list_extractor.extract_from_url(url)
+            return ImportExtractResponse(books=books, source="url", source_title=source_title)
+        logger.info("List import (text): %d chars", len(text))
+        books = await list_extractor.extract_from_text(text)
+        return ImportExtractResponse(books=books, source="text")
+    except ExtractionError as exc:
+        raise HTTPException(
+            status_code=_EXTRACTION_STATUS.get(exc.code, 502),
+            detail={"code": exc.code, "message": exc.message},
+        )
 
 
 @app.get("/portal/history", response_model=HistoryResponse)

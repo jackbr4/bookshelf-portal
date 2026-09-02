@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     # the banner/countdown UI can be exercised without a real rTorrent.
     mock_mam_exhausted: bool = False
 
+    # --- List import (article URL/text → book candidates via LLM) ---
+    anthropic_api_key: str = ""
+    extraction_model: str = "claude-haiku-4-5"
+    list_import_max_books: int = 40
+    list_import_fetch_timeout: float = 20.0
+    # Hard cap on fetched page bytes; anything larger is refused rather than
+    # streamed through the LLM.
+    list_import_fetch_max_bytes: int = 2 * 1024 * 1024
+
     # --- Release filter tuning ---
     # Indexers matching any of these substrings (case-insensitive) skip the
     # 512 KB minimum-size check.  Useful for curated trackers where short
