@@ -298,6 +298,7 @@ export async function mockExtractList(input: { url: string } | { text: string })
 interface MockJob {
   results: ImportResolveItem[];
   startedAt: number;
+  includeAudiobooks?: boolean;
 }
 
 const mockJobs = new Map<string, MockJob>();
@@ -351,11 +352,12 @@ function mockResolveOne(item: ImportResolveItem): ImportResolveItem {
   };
 }
 
-export async function mockStartResolve(books: { title: string; author: string }[]): Promise<{ jobId: string; total: number }> {
+export async function mockStartResolve(books: { title: string; author: string }[], includeAudiobooks = true): Promise<{ jobId: string; total: number }> {
   await delay(200);
   const jobId = `mock-${Date.now()}`;
   mockJobs.set(jobId, {
     startedAt: Date.now(),
+    includeAudiobooks,
     results: books.map((b, i) => ({ index: i, title: b.title, author: b.author, status: 'pending' })),
   });
   return { jobId, total: books.length };
@@ -368,7 +370,14 @@ export async function mockGetResolveStatus(jobId: string): Promise<ImportResolve
   // Resolve ~one book per 700ms, three at a time, like the real semaphore.
   const elapsed = Date.now() - job.startedAt;
   const resolvedCount = Math.min(job.results.length, Math.floor(elapsed / 700) * 3);
-  const results = job.results.map((r, i) => (i < resolvedCount && r.status === 'pending' ? mockResolveOne(r) : r));
+  const results = job.results.map((r, i) => {
+    if (i >= resolvedCount || r.status !== 'pending') return r;
+    const resolved = mockResolveOne(r);
+    if (job.includeAudiobooks === false && resolved.releases) {
+      resolved.releases = { ...resolved.releases, audiobookAccepted: [], audiobookRejected: [] };
+    }
+    return resolved;
+  });
   job.results = results;
   const completed = results.filter(r => r.status !== 'pending').length;
   return { jobId, done: completed === results.length, total: results.length, completed, results };

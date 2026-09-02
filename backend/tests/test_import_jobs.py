@@ -74,14 +74,14 @@ def test_job_resolves_every_book_and_reports_progress():
         assert all(r.releases is not None and len(r.releases.ebook_accepted) == 1 for r in final.results)
         assert [r.title for r in final.results] == ["A", "B", "C"]  # input order preserved
         assert resolver.resolve_book.await_count == 3
-        resolver.resolve_book.assert_any_await("A", "Someone")
+        resolver.resolve_book.assert_any_await("A", "Someone", include_audiobooks=True)
 
     asyncio.run(scenario())
 
 
 def test_one_failing_book_does_not_poison_the_job():
     async def scenario():
-        async def resolve(title, author):
+        async def resolve(title, author, **kwargs):
             if title == "B":
                 raise RuntimeError("Prowlarr exploded")
             return ReleasesResponse(calibre_title=title)
@@ -115,7 +115,7 @@ def test_concurrency_is_bounded():
         in_flight = 0
         peak = 0
 
-        async def resolve(title, author):
+        async def resolve(title, author, **kwargs):
             nonlocal in_flight, peak
             in_flight += 1
             peak = max(peak, in_flight)
@@ -138,7 +138,7 @@ def test_cancel_stops_work_and_forgets_the_job():
     async def scenario():
         started = 0
 
-        async def resolve(title, author):
+        async def resolve(title, author, **kwargs):
             nonlocal started
             started += 1
             await asyncio.sleep(10)

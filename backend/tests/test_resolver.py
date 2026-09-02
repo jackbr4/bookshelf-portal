@@ -127,6 +127,17 @@ def test_resolve_book_searches_both_content_types_once():
         assert c.args == ("Dune", "Frank Herbert")
 
 
+def test_resolve_book_ebooks_only_skips_audiobook_search():
+    search = AsyncMock(return_value=([], []))
+    r = _make_resolver(search=search)
+    result = asyncio.run(r.resolve_book("Dune", "Frank Herbert", include_audiobooks=False))
+
+    kinds = [c.kwargs["content_type"] for c in search.call_args_list]
+    assert kinds == ["ebook"]
+    assert result.audiobook_accepted == []
+    assert result.audiobook_rejected == []
+
+
 def test_resolve_book_propagates_search_failure():
     search = AsyncMock(side_effect=RuntimeError("prowlarr down"))
     r = _make_resolver(search=search)

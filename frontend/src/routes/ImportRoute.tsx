@@ -28,6 +28,7 @@ export default function ImportRoute() {
 
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [sourceTitle, setSourceTitle] = useState<string | null>(null)
+  const [includeAudiobooks, setIncludeAudiobooks] = useState(true)
 
   const [job, setJob] = useState<ImportResolveStatus | null>(null)
   const jobIdRef = useRef<string | null>(null)
@@ -86,7 +87,7 @@ export default function ImportRoute() {
     if (!books.length) return
     stopJob()
     try {
-      const { jobId, total } = await startResolve(books)
+      const { jobId, total } = await startResolve(books, includeAudiobooks)
       jobIdRef.current = jobId
       setJob({
         jobId,
@@ -221,7 +222,9 @@ export default function ImportRoute() {
           <ImportReviewTable
             rows={rows}
             sourceTitle={sourceTitle}
+            includeAudiobooks={includeAudiobooks}
             onChange={setRows}
+            onIncludeAudiobooksChange={setIncludeAudiobooks}
             onFind={handleFind}
             onStartOver={handleStartOver}
           />

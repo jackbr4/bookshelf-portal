@@ -672,6 +672,17 @@ body {
   flex-wrap: wrap;
 }
 
+.import-review__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
 .import-progress {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

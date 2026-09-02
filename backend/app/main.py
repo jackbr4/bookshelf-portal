@@ -331,7 +331,7 @@ async def import_resolve_start(body: ImportResolveRequest, request: Request, ses
             status_code=400,
             detail=f"Too many books — the limit is {settings.list_import_max_books} per import",
         )
-    job = resolve_jobs.create(books)
+    job = resolve_jobs.create(books, include_audiobooks=body.include_audiobooks)
     return ImportResolveCreated(job_id=job.id, total=len(books))
 
 

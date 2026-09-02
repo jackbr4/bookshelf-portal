@@ -170,18 +170,27 @@ class BookResolver:
     # Full resolution
     # -----------------------------------------------------------------------
 
-    async def resolve_book(self, title: str, author: str) -> ReleasesResponse:
+    async def resolve_book(
+        self, title: str, author: str, include_audiobooks: bool = True
+    ) -> ReleasesResponse:
         """
         Resolve one book: Calibre + audiobook presence, download history, and
         Prowlarr ebook + audiobook release searches, all run concurrently.
+
+        include_audiobooks=False skips the audiobook Prowlarr search (halving
+        indexer load); the local audiobook-folder presence check still runs.
 
         Callers pass already-stripped, non-empty title/author (at least one
         must be non-empty). Raises on unexpected failure; callers decide how
         to surface it (HTTP 502 for the endpoint, per-book error for the job).
         """
+        async def _no_releases():
+            return [], []
+
         (eb_acc, eb_rej), (ab_acc, ab_rej), cal_title, ab_title, (history, sent) = await asyncio.gather(
             self.prowlarr.search_releases(title, author, content_type="ebook"),
-            self.prowlarr.search_releases(title, author, content_type="audiobook"),
+            self.prowlarr.search_releases(title, author, content_type="audiobook")
+            if include_audiobooks else _no_releases(),
             self.check_in_calibre(title, author),
             self.check_in_audiobooks(title, author),
             self.check_history(title, author),

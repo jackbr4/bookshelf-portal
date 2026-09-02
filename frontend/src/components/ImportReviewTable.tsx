@@ -9,7 +9,9 @@ export interface ReviewRow extends BookCandidate {
 interface Props {
   rows: ReviewRow[]
   sourceTitle?: string | null
+  includeAudiobooks: boolean
   onChange: (rows: ReviewRow[]) => void
+  onIncludeAudiobooksChange: (value: boolean) => void
   onFind: () => void
   onStartOver: () => void
 }
@@ -19,7 +21,7 @@ export function newRow(partial: Partial<BookCandidate> = {}): ReviewRow {
   return { key: `row-${nextKey++}`, title: '', author: '', confidence: 'high', ...partial }
 }
 
-export default function ImportReviewTable({ rows, sourceTitle, onChange, onFind, onStartOver }: Props) {
+export default function ImportReviewTable({ rows, sourceTitle, includeAudiobooks, onChange, onIncludeAudiobooksChange, onFind, onStartOver }: Props) {
   const usable = rows.filter(r => r.title.trim() || r.author.trim()).length
   const lowCount = rows.filter(r => r.confidence === 'low').length
 
@@ -103,7 +105,15 @@ export default function ImportReviewTable({ rows, sourceTitle, onChange, onFind,
         <PortalButton variant="ghost" size="sm" type="button" onClick={() => onChange([...rows, newRow()])}>
           + Add a book
         </PortalButton>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label className="import-review__toggle">
+            <input
+              type="checkbox"
+              checked={includeAudiobooks}
+              onChange={e => onIncludeAudiobooksChange(e.target.checked)}
+            />
+            Include audiobooks
+          </label>
           <PortalButton variant="ghost" size="md" type="button" onClick={onStartOver}>
             Start over
           </PortalButton>

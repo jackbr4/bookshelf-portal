@@ -66,6 +66,10 @@ class ReleaseResult:
         }
 
 
+# Stop issuing fallback queries once this many accepted releases are found.
+EARLY_STOP_ACCEPTED = 5
+
+
 class ProwlarrClient:
     def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url.rstrip("/")
@@ -94,8 +98,10 @@ class ProwlarrClient:
         queries = _build_queries(title, author)
         raw_results: list[dict] = []
         seen_guids: set[str] = set()
+        accepted: list[ReleaseResult] = []
+        rejected: list[ReleaseResult] = []
 
-        for query in queries:
+        for i, query in enumerate(queries):
             try:
                 logger.info("[prowlarr] searching (%s): %r", content_type, query)
                 resp = await self._client.get(
@@ -127,7 +133,19 @@ class ProwlarrClient:
             except httpx.RequestError as e:
                 logger.warning("[prowlarr] request error for %r: %s", query, e)
 
-        return self._process(raw_results, content_type=content_type)
+            accepted, rejected = self._process(raw_results, content_type=content_type)
+            # Fallback queries only rescue books the primary query missed —
+            # skip them once we have enough accepted candidates, halving
+            # indexer load and latency for well-known titles.
+            if len(accepted) >= EARLY_STOP_ACCEPTED and i + 1 < len(queries):
+                logger.info(
+                    "[prowlarr] %d accepted after %r — skipping %d fallback quer%s",
+                    len(accepted), query, len(queries) - i - 1,
+                    "y" if len(queries) - i - 1 == 1 else "ies",
+                )
+                break
+
+        return accepted, rejected
 
     def _process(
         self, raw: list[dict], content_type: str = "ebook"

@@ -167,6 +167,7 @@ class ImportBookInput(BaseModel):
 
 class ImportResolveRequest(BaseModel):
     books: List[ImportBookInput]
+    include_audiobooks: bool = True
 
 
 class ImportResolveCreated(BaseModel):

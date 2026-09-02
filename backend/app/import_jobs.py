@@ -42,10 +42,11 @@ def _status_for(releases: ReleasesResponse) -> str:
 
 
 class _Job:
-    __slots__ = ("id", "created_at", "results", "completed", "task")
+    __slots__ = ("id", "created_at", "results", "completed", "task", "include_audiobooks")
 
-    def __init__(self, job_id: str, books: list[ImportBookInput]):
+    def __init__(self, job_id: str, books: list[ImportBookInput], include_audiobooks: bool = True):
         self.id = job_id
+        self.include_audiobooks = include_audiobooks
         self.created_at = time.monotonic()
         self.results = [
             ImportResolveItem(index=i, title=b.title.strip(), author=b.author.strip())
@@ -80,12 +81,15 @@ class ResolveJobStore:
     # Public API
     # -----------------------------------------------------------------------
 
-    def create(self, books: list[ImportBookInput]) -> _Job:
+    def create(self, books: list[ImportBookInput], include_audiobooks: bool = True) -> _Job:
         self._purge_expired()
-        job = _Job(secrets.token_urlsafe(12), books)
+        job = _Job(secrets.token_urlsafe(12), books, include_audiobooks=include_audiobooks)
         self._jobs[job.id] = job
         job.task = asyncio.create_task(self._run(job))
-        logger.info("[import-resolve] job %s started: %d books", job.id, len(books))
+        logger.info(
+            "[import-resolve] job %s started: %d books%s",
+            job.id, len(books), "" if include_audiobooks else " (ebooks only)",
+        )
         return job
 
     def get(self, job_id: str) -> Optional[_Job]:
@@ -133,8 +137,14 @@ class ResolveJobStore:
                     raise ValueError("title or author is required")
                 if self._mock_mode:
                     releases = await _mock_resolve(item.title, item.author)
+                    if not job.include_audiobooks:
+                        releases.audiobook_accepted = []
+                        releases.audiobook_rejected = []
                 else:
-                    releases = await self._resolver.resolve_book(item.title, item.author)
+                    releases = await self._resolver.resolve_book(
+                        item.title, item.author,
+                        include_audiobooks=job.include_audiobooks,
+                    )
                 item.releases = releases
                 item.status = _status_for(releases)
             except asyncio.CancelledError:

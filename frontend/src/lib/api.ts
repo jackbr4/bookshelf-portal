@@ -327,13 +327,16 @@ export async function extractList(input: { url: string } | { text: string }): Pr
   };
 }
 
-export async function startResolve(books: { title: string; author: string }[]): Promise<{ jobId: string; total: number }> {
-  if (MOCK_MODE) return mockStartResolve(books);
+export async function startResolve(
+  books: { title: string; author: string }[],
+  includeAudiobooks = true,
+): Promise<{ jobId: string; total: number }> {
+  if (MOCK_MODE) return mockStartResolve(books, includeAudiobooks);
   const res = await fetch('/portal/import/resolve', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ books }),
+    body: JSON.stringify({ books, include_audiobooks: includeAudiobooks }),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await handleResponse<any>(res);
