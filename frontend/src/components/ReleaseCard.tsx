@@ -1,4 +1,5 @@
 import type { ReleaseItem, ViewMode } from '../lib/types'
+import { useMamStatus } from '../lib/mamStatus'
 import PortalButton from './PortalButton'
 
 interface Props {
@@ -22,6 +23,10 @@ function formatMeta(release: ReleaseItem): string {
 
 export default function ReleaseCard({ release, viewMode, downloading, onDownload }: Props) {
   const format = release.detectedFormat?.toUpperCase() ?? 'FILE'
+  // Torrent dispatch is refused while MAM is at its slot cap; usenet never
+  // counts against MAM so those buttons stay live.
+  const { blocked: mamBlocked } = useMamStatus()
+  const slotBlocked = mamBlocked && release.protocol === 'torrent'
 
   return (
     <article className="release-card">
@@ -49,6 +54,8 @@ export default function ReleaseCard({ release, viewMode, downloading, onDownload
           variant="primary"
           size="sm"
           loading={downloading}
+          disabled={slotBlocked}
+          title={slotBlocked ? 'MAM download limit reached — see the notice above for when downloads resume' : undefined}
           onClick={() => onDownload(release)}
         >
           Download

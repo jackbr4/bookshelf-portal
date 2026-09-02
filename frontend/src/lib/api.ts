@@ -7,6 +7,7 @@ import type {
   GoodreadsProfile,
   ReleaseItem,
   MediaType,
+  MamStatus,
 } from './types';
 import {
   mockAuth,
@@ -17,9 +18,27 @@ import {
   mockGetGoodreadsProfiles,
   mockAddGoodreadsProfile,
   mockDeleteGoodreadsProfile,
+  mockGetMamStatus,
 } from '../mocks/mockApi';
 
 const MOCK_MODE = import.meta.env.VITE_MOCK_MODE === 'true';
+
+/**
+ * Non-2xx API response. `detail` keeps the structured payload some endpoints
+ * return (e.g. the MAM 429 carries `next_free_at`); `message` is always a
+ * human-readable string.
+ */
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(status: number, message: string, detail: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
@@ -27,16 +46,30 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    let detail = `HTTP ${res.status}`;
+    let message = `HTTP ${res.status}`;
+    let detail: unknown = text;
     try {
       const json = JSON.parse(text);
-      detail = json.detail || json.message || text || detail;
+      detail = json.detail ?? json;
+      const d = json.detail;
+      if (typeof d === 'string') message = d;
+      else if (d && typeof d.message === 'string') message = d.message;
+      else if (typeof json.message === 'string') message = json.message;
+      else if (text) message = text;
     } catch {
-      if (text) detail = text;
+      if (text) message = text;
     }
-    throw new Error(detail);
+    throw new ApiError(res.status, message, detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** Extract the MAM 429 payload from a download error, if that's what it is. */
+export function mamBlockedDetail(err: unknown): { nextFreeAt: number | null } | null {
+  if (!(err instanceof ApiError) || err.status !== 429) return null;
+  const d = err.detail as { next_free_at?: number | null } | null;
+  if (!d || typeof d !== 'object' || !('next_free_at' in d)) return null;
+  return { nextFreeAt: d.next_free_at ?? null };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,6 +186,22 @@ export async function downloadRelease(args: {
     recordId: data.record_id,
     downloadId: data.download_id,
     message: data.message,
+  };
+}
+
+export async function getMamStatus(): Promise<MamStatus> {
+  if (MOCK_MODE) return mockGetMamStatus();
+  const res = await fetch('/portal/mam-status', { credentials: 'include' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await handleResponse<any>(res);
+  return {
+    unsatisfied: data.unsatisfied ?? null,
+    limit: data.limit,
+    blockThreshold: data.block_threshold,
+    slotsFree: data.slots_free ?? null,
+    blocked: !!data.blocked,
+    nextFreeAt: data.next_free_at ?? null,
+    serverTime: data.server_time,
   };
 }
 

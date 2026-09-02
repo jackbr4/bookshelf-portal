@@ -1,14 +1,23 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import PasswordRoute from './routes/PasswordRoute'
 import RequestRoute from './routes/RequestRoute'
 import AdminRoute from './routes/AdminRoute'
 import { isSessionValid } from './lib/session'
+import { MamStatusProvider } from './lib/mamStatus'
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+/**
+ * Layout route for everything behind the password gate. Sitewide state that
+ * should survive navigation between pages (MAM slot status polling) lives here.
+ */
+function AuthedLayout() {
   if (!isSessionValid()) {
     return <Navigate to="/" replace />
   }
-  return <>{children}</>
+  return (
+    <MamStatusProvider>
+      <Outlet />
+    </MamStatusProvider>
+  )
 }
 
 export default function App() {
@@ -16,22 +25,10 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<PasswordRoute />} />
-        <Route
-          path="/request"
-          element={
-            <RequireAuth>
-              <RequestRoute />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <RequireAuth>
-              <AdminRoute />
-            </RequireAuth>
-          }
-        />
+        <Route element={<AuthedLayout />}>
+          <Route path="/request" element={<RequestRoute />} />
+          <Route path="/admin" element={<AdminRoute />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

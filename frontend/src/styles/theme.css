@@ -24,6 +24,11 @@
   --color-usenet: #9B6400;
   --color-usenet-bg: #FFF4D8;
   --color-ebook-tag: #DFF5E8;
+  --color-warning: #9B6400;
+  --color-warning-bg: #FFF4D8;
+  --color-danger: #B42318;
+  --color-danger-bg: #FEE4E2;
+  --color-danger-border: #F9B8B2;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -72,6 +77,79 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* MAM slot indicator (header) */
+.mam-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+.mam-pill strong {
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.mam-pill--warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.mam-pill--warn strong {
+  color: var(--color-warning);
+}
+
+.mam-pill--unknown {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+}
+
+/* MAM blocked banner (sitewide, under the header) */
+.mam-banner {
+  background: var(--color-danger-bg);
+  border-bottom: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.mam-banner__inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: var(--admin-max);
+  margin: 0 auto;
+  padding: 14px 28px;
+}
+
+.mam-banner__icon {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.mam-banner__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mam-banner__body {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.mam-banner__countdown {
+  font-family: var(--font-data);
+  font-weight: 700;
 }
 
 .portal-btn {
@@ -738,6 +816,14 @@ body {
 @media (max-width: 576px) {
   .portal-topbar {
     padding: 0 16px;
+  }
+
+  .mam-pill__detail {
+    display: none;
+  }
+
+  .mam-banner__inner {
+    padding: 12px 16px;
   }
 
   .portal-toast-container {

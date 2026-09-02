@@ -7,9 +7,15 @@ import type {
   GoodreadsProfile,
   ReleaseItem,
   MediaType,
+  MamStatus,
 } from '../lib/types';
 
 const MOCK_PASSWORD = 'family';
+// Mirrors the backend's MOCK_MAM_EXHAUSTED: report 150/150 with a ~2h14m
+// countdown so the red banner can be exercised without a real rTorrent.
+const MOCK_MAM_EXHAUSTED = import.meta.env.VITE_MOCK_MAM_EXHAUSTED === 'true';
+const MAM_LIMIT = 150;
+const MAM_BLOCK_THRESHOLD = 145;
 
 const MOCK_EBOOK_RELEASES: ReleaseItem[] = [
   {
@@ -231,4 +237,19 @@ export async function mockAddGoodreadsProfile(body: {
 export async function mockDeleteGoodreadsProfile(profileId: string): Promise<void> {
   await delay(200);
   mockProfiles = mockProfiles.filter(p => p.id !== profileId);
+}
+
+export async function mockGetMamStatus(): Promise<MamStatus> {
+  await delay(200);
+  const now = Math.floor(Date.now() / 1000);
+  const unsatisfied = MOCK_MAM_EXHAUSTED ? MAM_LIMIT : 143;
+  return {
+    unsatisfied,
+    limit: MAM_LIMIT,
+    blockThreshold: MAM_BLOCK_THRESHOLD,
+    slotsFree: Math.max(0, MAM_BLOCK_THRESHOLD - unsatisfied),
+    blocked: unsatisfied >= MAM_BLOCK_THRESHOLD,
+    nextFreeAt: MOCK_MAM_EXHAUSTED ? now + 2 * 3600 + 14 * 60 : now + 5 * 3600,
+    serverTime: now,
+  };
 }

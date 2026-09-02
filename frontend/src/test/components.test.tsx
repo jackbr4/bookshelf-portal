@@ -16,6 +16,8 @@ vi.mock('../lib/api', () => ({
   getGoodreadsProfiles: vi.fn(),
   addGoodreadsProfile: vi.fn(),
   deleteGoodreadsProfile: vi.fn(),
+  getMamStatus: vi.fn(),
+  mamBlockedDetail: vi.fn(() => null),
 }))
 
 vi.mock('../lib/session', () => ({
