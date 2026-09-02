@@ -147,16 +147,16 @@ describe('ImportRoute — review stage', () => {
       { index: 0, title: 'Stoner', author: 'John Williams', status: 'not_found', releases: EMPTY },
     ] })
     fireEvent.click(screen.getByRole('button', { name: 'Find availability (1)' }))
-    await waitFor(() => expect(startResolve).toHaveBeenCalledWith([{ title: 'Stoner', author: 'John Williams' }], true))
+    await waitFor(() => expect(startResolve).toHaveBeenCalledWith([{ title: 'Stoner', author: 'John Williams' }], false))
   })
 
-  it('unticking "Include audiobooks" starts an ebooks-only resolve', async () => {
+  it('ticking "Include audiobooks" (off by default) resolves both formats', async () => {
     await goToReview()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include audiobooks' }))
     vi.mocked(startResolve).mockResolvedValue({ jobId: 'j1', total: 2 })
     vi.mocked(getResolveStatus).mockResolvedValue({ jobId: 'j1', done: true, total: 2, completed: 2, results: [] })
     fireEvent.click(screen.getByRole('button', { name: 'Find availability (2)' }))
-    await waitFor(() => expect(startResolve).toHaveBeenCalledWith(expect.anything(), false))
+    await waitFor(() => expect(startResolve).toHaveBeenCalledWith(expect.anything(), true))
   })
 
   it('start over returns to the input stage', async () => {

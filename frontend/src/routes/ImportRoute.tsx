@@ -28,7 +28,7 @@ export default function ImportRoute() {
 
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [sourceTitle, setSourceTitle] = useState<string | null>(null)
-  const [includeAudiobooks, setIncludeAudiobooks] = useState(true)
+  const [includeAudiobooks, setIncludeAudiobooks] = useState(false)
 
   const [job, setJob] = useState<ImportResolveStatus | null>(null)
   const jobIdRef = useRef<string | null>(null)
