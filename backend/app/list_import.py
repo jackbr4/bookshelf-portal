@@ -6,10 +6,12 @@ Claude call with a JSON-schema-constrained output.
 No searching happens here — the candidates feed the review UI, which then
 kicks off a resolve job.
 """
+import ipaddress
 import json
 import logging
 import re
 from typing import Optional
+from urllib.parse import urlsplit
 
 import httpx
 import trafilatura
@@ -78,6 +80,25 @@ MOCK_BOOKS = [
 ]
 
 
+def _assert_public_host(url: str) -> None:
+    """
+    Refuse URLs that point at the box itself or private networks. The fetch
+    runs from the seedbox, so without this a pasted link could read local
+    services (Prowlarr, rTorrent XMLRPC, ...) through the portal.
+    """
+    host = (urlsplit(url).hostname or "").strip("[]").lower()
+    if not host:
+        raise ExtractionError("fetch_failed", "That URL has no host name")
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local") or host.endswith(".internal"):
+        raise ExtractionError("fetch_failed", "That URL points at a local address")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return  # a public host name; DNS rebinding is out of scope for a family-only tool
+    if not ip.is_global:
+        raise ExtractionError("fetch_failed", "That URL points at a local address")
+
+
 class ExtractionError(Exception):
     """
     User-facing extraction failure. `code` is stable for the frontend:
@@ -143,6 +164,7 @@ class ListExtractor:
     async def _fetch(self, url: str) -> str:
         if not re.match(r"^https?://", url, re.I):
             raise ExtractionError("fetch_failed", "URL must start with http:// or https://")
+        _assert_public_host(url)
         try:
             async with httpx.AsyncClient(
                 follow_redirects=True,
@@ -150,6 +172,9 @@ class ListExtractor:
                 headers={"User-Agent": _UA, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5"},
             ) as client:
                 async with client.stream("GET", url) as resp:
+                    # Redirects are followed; make sure none of them hopped inside.
+                    for hop in [*resp.history, resp]:
+                        _assert_public_host(str(hop.url))
                     if resp.status_code >= 400:
                         raise ExtractionError(
                             "fetch_failed", f"The page returned HTTP {resp.status_code}"

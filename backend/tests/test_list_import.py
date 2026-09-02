@@ -94,6 +94,39 @@ def test_fetch_rejects_non_http_url():
     assert ei.value.code == "fetch_failed"
 
 
+def test_fetch_refuses_local_and_private_hosts():
+    ex = _make()
+    for url in [
+        "http://localhost:29254/api/v1/indexer",
+        "http://127.0.0.1/",
+        "http://[::1]:8080/",
+        "http://10.0.0.5/",
+        "http://192.168.1.10/",
+        "http://172.16.0.1/",
+        "http://169.254.169.254/latest/meta-data",
+        "http://seedbox.local/",
+    ]:
+        with pytest.raises(ExtractionError) as ei:
+            asyncio.run(ex.extract_from_url(url))
+        assert ei.value.code == "fetch_failed", url
+        assert "local" in ei.value.message
+
+
+def test_fetch_refuses_redirects_into_private_hosts():
+    ex = _make()
+
+    def handler(req):
+        if req.url.host == "example.com":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1:29254/api/v1/indexer"})
+        return httpx.Response(200, text=ARTICLE_HTML, headers={"content-type": "text/html"})
+
+    with _mock_http(handler):
+        with pytest.raises(ExtractionError) as ei:
+            asyncio.run(ex.extract_from_url("https://example.com/list"))
+    assert ei.value.code == "fetch_failed"
+    assert "local" in ei.value.message
+
+
 def test_fetch_http_error_becomes_fetch_failed():
     ex = _make()
     with _mock_http(lambda req: httpx.Response(403, text="forbidden")):
