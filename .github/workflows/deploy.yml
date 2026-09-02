@@ -28,8 +28,10 @@ jobs:
               echo "  Creating fresh venv (missing or shebangs stale after path change)..."
               rm -rf venv
               python3 -m venv venv
-              venv/bin/pip install -r requirements.txt -q
             fi
+            # Always sync deps — no-op when requirements.txt is unchanged,
+            # keeps host venv (crons, tests) in step with the container.
+            venv/bin/pip install -r requirements.txt -q
             cd ~/apps/bookshelf-portal
 
             echo "Building container..."
@@ -49,7 +51,11 @@ jobs:
             podman rm -f bookshelf-request-portal || true
 
             echo "Killing any process still holding port 8788..."
-            fuser -k 8788/tcp 2>/dev/null || lsof -ti:8788 | xargs kill -9 2>/dev/null || true
+            # fuser/lsof can't see other processes' sockets on this kernel, so
+            # kill any surviving portal uvicorn by command line instead.
+            # [.] is a literal dot to the regex but stops the pattern matching
+            # this script's own shell.
+            pkill -9 -f 'uvicorn app[.]main:app --host 0[.]0[.]0[.]0 --port 8788' || true
             sleep 1
 
             echo "Starting new container..."
