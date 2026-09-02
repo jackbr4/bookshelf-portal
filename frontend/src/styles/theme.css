@@ -108,49 +108,21 @@ body {
   color: var(--color-warning);
 }
 
+.mam-pill--blocked {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.mam-pill--blocked strong {
+  color: var(--color-danger);
+}
+
 .mam-pill--unknown {
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
   border: 1px dashed var(--color-border);
 }
 
-/* MAM blocked banner (sitewide, under the header) */
-.mam-banner {
-  background: var(--color-danger-bg);
-  border-bottom: 1px solid var(--color-danger-border);
-  color: var(--color-danger);
-}
-
-.mam-banner__inner {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  max-width: var(--admin-max);
-  margin: 0 auto;
-  padding: 14px 28px;
-}
-
-.mam-banner__icon {
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-.mam-banner__title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.mam-banner__body {
-  margin: 4px 0 0;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.mam-banner__countdown {
-  font-family: var(--font-data);
-  font-weight: 700;
-}
 
 .portal-btn {
   display: inline-flex;
@@ -960,16 +932,6 @@ body {
   cursor: default;
 }
 
-.metric-card--warning {
-  background: var(--color-warning-bg);
-  border-color: #F3D48A;
-}
-
-.metric-card--danger {
-  background: var(--color-danger-bg);
-  border-color: var(--color-danger-border);
-}
-
 .metric-card__detail {
   margin-top: 4px;
   font-size: 12px;
@@ -1169,9 +1131,6 @@ body {
     display: none;
   }
 
-  .mam-banner__inner {
-    padding: 12px 16px;
-  }
 
   .portal-toast-container {
     left: 1rem;

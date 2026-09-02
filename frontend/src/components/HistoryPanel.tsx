@@ -59,6 +59,7 @@ export default function HistoryPanel({
   return (
     <section>
       <div className="admin-metrics">
+        <MamSlotsCard />
         {metricCards.map(card => (
           <button
             key={card.key}
@@ -70,7 +71,6 @@ export default function HistoryPanel({
             <div className="metric-card__label">{card.label}</div>
           </button>
         ))}
-        <MamSlotsCard />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>

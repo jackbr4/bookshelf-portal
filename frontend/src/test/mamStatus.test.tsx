@@ -9,7 +9,7 @@ vi.mock('../lib/api', () => ({
 
 import { getMamStatus } from '../lib/api'
 import { MamStatusProvider, formatRemaining, secondsUntil, MAM_POLL_INTERVAL_MS } from '../lib/mamStatus'
-import { MamBlockedBanner, MamStatusPill } from '../components/MamStatusBanner'
+import { MamStatusPill } from '../components/MamStatusBanner'
 import PortalHeader from '../components/PortalHeader'
 import ReleaseCard from '../components/ReleaseCard'
 import HistoryPanel from '../components/HistoryPanel'
@@ -71,7 +71,7 @@ describe('mamStatus helpers', () => {
   })
 })
 
-describe('MamStatusPill / MamBlockedBanner', () => {
+describe('MamStatusPill', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(NOW_MS)
@@ -81,15 +81,15 @@ describe('MamStatusPill / MamBlockedBanner', () => {
     vi.mocked(getMamStatus).mockReset()
   })
 
-  it('shows a neutral pill and no banner when slots are plentiful', async () => {
+  it('shows a neutral pill when slots are plentiful', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(status())
-    renderWithProvider(<><MamStatusPill /><MamBlockedBanner /></>)
+    renderWithProvider(<MamStatusPill />)
 
     const pill = await screen.findByTestId('mam-pill')
     expect(pill).toHaveTextContent('MAM slots: 45 free')
     expect(pill).toHaveTextContent('100/150 seeding')
     expect(pill).not.toHaveClass('mam-pill--warn')
-    expect(screen.queryByTestId('mam-banner')).not.toBeInTheDocument()
+    expect(pill).not.toHaveClass('mam-pill--blocked')
   })
 
   it('turns amber when slots_free is at or below the warning level', async () => {
@@ -101,17 +101,17 @@ describe('MamStatusPill / MamBlockedBanner', () => {
     expect(pill).toHaveTextContent('5 free')
   })
 
-  it('shows the red banner with a countdown when blocked, and hides the pill', async () => {
+  it('turns red with a countdown when blocked', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(
       status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: NOW_S + 2 * 3600 + 14 * 60 })
     )
-    renderWithProvider(<><MamStatusPill /><MamBlockedBanner /></>)
+    renderWithProvider(<MamStatusPill />)
 
-    const banner = await screen.findByTestId('mam-banner')
-    expect(banner).toHaveTextContent('MAM download limit reached (150/150 unsatisfied)')
-    expect(banner).toHaveTextContent('24-hour account block')
-    expect(banner).toHaveTextContent('Next slot frees in 2h 14m')
-    expect(screen.queryByTestId('mam-pill')).not.toBeInTheDocument()
+    const pill = await screen.findByTestId('mam-pill')
+    expect(pill).toHaveClass('mam-pill--blocked')
+    expect(pill).toHaveTextContent('MAM slots: paused')
+    expect(pill).toHaveTextContent('next slot in 2h 14m')
+    expect(pill).toHaveAttribute('title', expect.stringContaining('24-hour'))
   })
 
   it('counts down against the server clock as time passes', async () => {
@@ -126,35 +126,35 @@ describe('MamStatusPill / MamBlockedBanner', () => {
         serverTime: Date.now() / 1000,
       })
     )
-    renderWithProvider(<MamBlockedBanner />)
+    renderWithProvider(<MamStatusPill />)
     await screen.findByText(/2h 14m/)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
     })
-    expect(screen.getByTestId('mam-banner')).toHaveTextContent('2h 11m')
+    expect(screen.getByTestId('mam-pill')).toHaveTextContent('2h 11m')
   })
 
-  it('says "waiting for current downloads" when next_free_at is null', async () => {
+  it('says "waiting for downloads" when next_free_at is null', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(
       status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: null })
     )
-    renderWithProvider(<MamBlockedBanner />)
+    renderWithProvider(<MamStatusPill />)
 
-    const banner = await screen.findByTestId('mam-banner')
-    expect(banner).toHaveTextContent('Waiting for current downloads to finish')
-    expect(banner).not.toHaveTextContent('Next slot frees')
+    const pill = await screen.findByTestId('mam-pill')
+    expect(pill).toHaveTextContent('waiting for downloads')
+    expect(pill).not.toHaveTextContent('next slot')
   })
 
   it('shows the unverifiable variant when rTorrent is unreachable (fail closed)', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(
       status({ unsatisfied: null, slotsFree: null, blocked: true, nextFreeAt: null })
     )
-    renderWithProvider(<MamBlockedBanner />)
+    renderWithProvider(<MamStatusPill />)
 
-    const banner = await screen.findByTestId('mam-banner')
-    expect(banner).toHaveTextContent('MAM slot status unavailable')
-    expect(banner).toHaveTextContent('usenet downloads are unaffected')
+    const pill = await screen.findByTestId('mam-pill')
+    expect(pill).toHaveClass('mam-pill--blocked')
+    expect(pill).toHaveTextContent('rTorrent unreachable')
   })
 
   it('re-polls on the interval', async () => {
@@ -169,12 +169,12 @@ describe('MamStatusPill / MamBlockedBanner', () => {
     expect(getMamStatus).toHaveBeenCalledTimes(2)
   })
 
-  it('renders the banner from PortalHeader so every page gets it', async () => {
+  it('renders the pill from PortalHeader so every page gets it', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(
       status({ unsatisfied: 150, slotsFree: 0, blocked: true })
     )
     renderWithProvider(<PortalHeader title="Admin" showAdmin={false} onSignOut={() => {}} />)
-    await screen.findByTestId('mam-banner')
+    await screen.findByTestId('mam-pill')
     expect(screen.getByText('Admin')).toBeInTheDocument()
   })
 })
@@ -197,13 +197,17 @@ describe('MAM slots card on the admin Status tab', () => {
     await waitFor(() => expect(card).toHaveTextContent('45'))
     expect(card).toHaveTextContent('MAM SLOTS')
     expect(card).toHaveTextContent('100/150 used')
-    expect(card).not.toHaveClass('metric-card--warning')
+    expect(card.querySelector('.metric-card__value')).toHaveClass('metric-card__value--teal')
+    // First in the row
+    expect(card.parentElement?.firstElementChild).toBe(card)
   })
 
   it('goes amber when low and red with a countdown when blocked', async () => {
     vi.mocked(getMamStatus).mockResolvedValue(status({ unsatisfied: 140, slotsFree: 5 }))
     const { unmount } = renderPanel()
-    await waitFor(() => expect(screen.getByTestId('mam-slots-card')).toHaveClass('metric-card--warning'))
+    await waitFor(() =>
+      expect(screen.getByTestId('mam-slots-card').querySelector('.metric-card__value')).toHaveClass('metric-card__value--warning')
+    )
     unmount()
 
     vi.mocked(getMamStatus).mockResolvedValue(
@@ -211,7 +215,7 @@ describe('MAM slots card on the admin Status tab', () => {
     )
     renderPanel()
     const card = await screen.findByTestId('mam-slots-card')
-    await waitFor(() => expect(card).toHaveClass('metric-card--danger'))
+    await waitFor(() => expect(card.querySelector('.metric-card__value')).toHaveClass('metric-card__value--error'))
     expect(card).toHaveTextContent('150/150 · next slot in 2h 14m')
   })
 })
@@ -242,6 +246,7 @@ describe('ReleaseCard under MAM block', () => {
       const [torrentBtn, usenetBtn] = screen.getAllByRole('button', { name: 'Download' })
       expect(torrentBtn).toBeDisabled()
       expect(torrentBtn).toHaveAttribute('title', expect.stringContaining('MAM download limit reached'))
+      expect(torrentBtn).not.toHaveAttribute('title', expect.stringContaining('notice above'))
       expect(usenetBtn).toBeEnabled()
     })
   })
