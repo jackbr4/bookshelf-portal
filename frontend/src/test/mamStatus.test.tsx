@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { MamStatus } from '../lib/types'
@@ -9,8 +9,6 @@ vi.mock('../lib/api', () => ({
 
 import { getMamStatus } from '../lib/api'
 import { MamStatusProvider, formatRemaining, secondsUntil, MAM_POLL_INTERVAL_MS } from '../lib/mamStatus'
-import { MamStatusPill } from '../components/MamStatusBanner'
-import PortalHeader from '../components/PortalHeader'
 import ReleaseCard from '../components/ReleaseCard'
 import HistoryPanel from '../components/HistoryPanel'
 
@@ -71,114 +69,6 @@ describe('mamStatus helpers', () => {
   })
 })
 
-describe('MamStatusPill', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    vi.setSystemTime(NOW_MS)
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.mocked(getMamStatus).mockReset()
-  })
-
-  it('shows a neutral pill when slots are plentiful', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(status())
-    renderWithProvider(<MamStatusPill />)
-
-    const pill = await screen.findByTestId('mam-pill')
-    expect(pill).toHaveTextContent('MAM slots: 45 free')
-    expect(pill).toHaveTextContent('100/150 seeding')
-    expect(pill).not.toHaveClass('mam-pill--warn')
-    expect(pill).not.toHaveClass('mam-pill--blocked')
-  })
-
-  it('turns amber when slots_free is at or below the warning level', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(status({ unsatisfied: 140, slotsFree: 5 }))
-    renderWithProvider(<MamStatusPill />)
-
-    const pill = await screen.findByTestId('mam-pill')
-    expect(pill).toHaveClass('mam-pill--warn')
-    expect(pill).toHaveTextContent('5 free')
-  })
-
-  it('turns red with a countdown when blocked', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(
-      status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: NOW_S + 2 * 3600 + 14 * 60 })
-    )
-    renderWithProvider(<MamStatusPill />)
-
-    const pill = await screen.findByTestId('mam-pill')
-    expect(pill).toHaveClass('mam-pill--blocked')
-    expect(pill).toHaveTextContent('MAM slots: paused')
-    expect(pill).toHaveTextContent('next slot in 2h 14m')
-    expect(pill).toHaveAttribute('title', expect.stringContaining('24-hour'))
-  })
-
-  it('counts down against the server clock as time passes', async () => {
-    // A real server's server_time advances between polls; a frozen one would
-    // (correctly) tell the client its clock is running ahead.
-    vi.mocked(getMamStatus).mockImplementation(async () =>
-      status({
-        unsatisfied: 150,
-        slotsFree: 0,
-        blocked: true,
-        nextFreeAt: NOW_S + 2 * 3600 + 14 * 60,
-        serverTime: Date.now() / 1000,
-      })
-    )
-    renderWithProvider(<MamStatusPill />)
-    await screen.findByText(/2h 14m/)
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
-    })
-    expect(screen.getByTestId('mam-pill')).toHaveTextContent('2h 11m')
-  })
-
-  it('says "waiting for downloads" when next_free_at is null', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(
-      status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: null })
-    )
-    renderWithProvider(<MamStatusPill />)
-
-    const pill = await screen.findByTestId('mam-pill')
-    expect(pill).toHaveTextContent('waiting for downloads')
-    expect(pill).not.toHaveTextContent('next slot')
-  })
-
-  it('shows the unverifiable variant when rTorrent is unreachable (fail closed)', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(
-      status({ unsatisfied: null, slotsFree: null, blocked: true, nextFreeAt: null })
-    )
-    renderWithProvider(<MamStatusPill />)
-
-    const pill = await screen.findByTestId('mam-pill')
-    expect(pill).toHaveClass('mam-pill--blocked')
-    expect(pill).toHaveTextContent('rTorrent unreachable')
-  })
-
-  it('re-polls on the interval', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(status())
-    renderWithProvider(<MamStatusPill />)
-    await screen.findByTestId('mam-pill')
-    expect(getMamStatus).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(MAM_POLL_INTERVAL_MS + 50)
-    })
-    expect(getMamStatus).toHaveBeenCalledTimes(2)
-  })
-
-  it('renders the pill from PortalHeader so every page gets it', async () => {
-    vi.mocked(getMamStatus).mockResolvedValue(
-      status({ unsatisfied: 150, slotsFree: 0, blocked: true })
-    )
-    renderWithProvider(<PortalHeader title="Admin" showAdmin={false} onSignOut={() => {}} />)
-    await screen.findByTestId('mam-pill')
-    expect(screen.getByText('Admin')).toBeInTheDocument()
-  })
-})
-
 describe('MAM slots card on the admin Status tab', () => {
   afterEach(() => {
     vi.mocked(getMamStatus).mockReset()
@@ -200,6 +90,47 @@ describe('MAM slots card on the admin Status tab', () => {
     expect(card.querySelector('.metric-card__value')).toHaveClass('metric-card__value--teal')
     // First in the row
     expect(card.parentElement?.firstElementChild).toBe(card)
+  })
+
+  it('re-polls on the interval', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.mocked(getMamStatus).mockResolvedValue(status())
+      renderPanel()
+      await screen.findByTestId('mam-slots-card')
+      await waitFor(() => expect(getMamStatus).toHaveBeenCalledTimes(1))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MAM_POLL_INTERVAL_MS + 50)
+      })
+      expect(getMamStatus).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('counts down against the server clock while blocked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW_MS)
+    try {
+      vi.mocked(getMamStatus).mockImplementation(async () =>
+        status({ unsatisfied: 150, slotsFree: 0, blocked: true, nextFreeAt: NOW_S + 2 * 3600 + 14 * 60, serverTime: Date.now() / 1000 })
+      )
+      renderPanel()
+      await screen.findByText(/2h 14m/)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
+      })
+      expect(screen.getByTestId('mam-slots-card')).toHaveTextContent('2h 11m')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows the unverifiable state when rTorrent is unreachable (fail closed)', async () => {
+    vi.mocked(getMamStatus).mockResolvedValue(status({ unsatisfied: null, slotsFree: null, blocked: true, nextFreeAt: null }))
+    renderPanel()
+    const card = await screen.findByTestId('mam-slots-card')
+    await waitFor(() => expect(card).toHaveTextContent('rTorrent unreachable'))
   })
 
   it('goes amber when low and red with a countdown when blocked', async () => {

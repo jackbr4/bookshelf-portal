@@ -79,49 +79,6 @@ body {
   gap: 10px;
 }
 
-/* MAM slot indicator (header) */
-.mam-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  background: var(--color-surface-soft);
-  color: var(--color-text-secondary);
-  cursor: default;
-}
-
-.mam-pill strong {
-  font-weight: 800;
-  color: var(--color-text-primary);
-}
-
-.mam-pill--warn {
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
-.mam-pill--warn strong {
-  color: var(--color-warning);
-}
-
-.mam-pill--blocked {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-}
-
-.mam-pill--blocked strong {
-  color: var(--color-danger);
-}
-
-.mam-pill--unknown {
-  background: var(--color-surface-muted);
-  color: var(--color-text-muted);
-  border: 1px dashed var(--color-border);
-}
 
 
 .portal-btn {
@@ -1125,10 +1082,6 @@ body {
 @media (max-width: 576px) {
   .portal-topbar {
     padding: 0 16px;
-  }
-
-  .mam-pill__detail {
-    display: none;
   }
 
 

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import PortalButton from './PortalButton'
-import { MamStatusPill } from './MamStatusBanner'
 
 interface Props {
   title: string
@@ -22,7 +21,6 @@ export default function PortalHeader({ title, showAdmin = true, showImport = tru
         )}
       </div>
       <div className="portal-topbar__actions">
-        <MamStatusPill />
         {showImport && (
           <Link to="/import" style={{ textDecoration: 'none' }}>
             <PortalButton variant="soft" size="sm" type="button">Import list</PortalButton>
