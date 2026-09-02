@@ -62,9 +62,16 @@ class Settings(BaseSettings):
     goodreads_user_id: str = ""
     goodreads_shelf: str = "to-read"
     goodreads_max_per_run: int = 3
-    # MAM enforces a 150-torrent cap on unsatisfied (seeding < 72 h) downloads.
-    # Exceeding it triggers a 3-day ban. This is checked before each run.
+    # MAM (VIP class) enforces a 150-torrent cap on unsatisfied (seeding
+    # < 72 h) downloads. Requesting a download while AT the cap blocks the
+    # account for 24 hours, so dispatch is refused at mam_block_threshold —
+    # a buffer below the real cap that absorbs status staleness and
+    # concurrent writers (Goodreads cron, manual rTorrent use).
     mam_max_unsatisfied: int = 150
+    mam_block_threshold: int = 145
+    # Local-dev only: with mock_mode, report the slot limit as exhausted so
+    # the banner/countdown UI can be exercised without a real rTorrent.
+    mock_mam_exhausted: bool = False
 
     # --- Release filter tuning ---
     # Indexers matching any of these substrings (case-insensitive) skip the

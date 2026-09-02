@@ -23,6 +23,7 @@ from .admin_page import ADMIN_PAGE_HTML
 from .history import HistoryDB
 from .prowlarr_client import ProwlarrClient
 from .download_client import DownloadClient
+from .mam_status import MamStatusService
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
@@ -83,6 +84,14 @@ download_client = DownloadClient(
     sabnzbd_base_url=settings.sabnzbd_base_url,
     sabnzbd_api_key=settings.sabnzbd_api_key,
     sabnzbd_category=settings.sabnzbd_category,
+)
+
+mam_status_service = MamStatusService(
+    download_client=download_client,
+    limit=settings.mam_max_unsatisfied,
+    block_threshold=settings.mam_block_threshold,
+    mock_mode=settings.mock_mode,
+    mock_exhausted=settings.mock_mam_exhausted,
 )
 
 
@@ -235,6 +244,28 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
     if body.media_type not in (None, "ebook", "audiobook"):
         raise HTTPException(status_code=400, detail="Invalid media_type")
 
+    # MAM slot guard — torrent dispatches only (usenet never counts against
+    # MAM). Requesting a download while at MAM's unsatisfied cap blocks the
+    # account for 24 h, so refuse at the threshold and fail closed when the
+    # slot status cannot be verified.
+    if body.protocol == "torrent":
+        mam = await mam_status_service.get_status()
+        if mam["unsatisfied"] is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Cannot verify MAM slot status (rTorrent unreachable) — try again shortly",
+            )
+        if mam["blocked"]:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "MAM download limit reached — downloads are paused",
+                    "next_free_at": mam["next_free_at"],
+                    "unsatisfied": mam["unsatisfied"],
+                    "limit": mam["limit"],
+                },
+            )
+
     logger.info("Download dispatch: %r by %r via %s (%s)", body.title, body.author, body.protocol, body.media_type or "ebook")
     try:
         download_id = await download_client.dispatch(
@@ -251,6 +282,8 @@ async def dispatch_download(body: DownloadRequest, request: Request, session=Dep
             download_id=download_id,
             media_type=body.media_type,
         )
+        if body.protocol == "torrent":
+            mam_status_service.note_torrent_dispatched()
         return DownloadResponse(
             ok=True,
             record_id=record_id,
@@ -293,6 +326,11 @@ async def get_releases(
     except Exception as e:
         logger.error("Release search error: %s", e)
         raise HTTPException(status_code=502, detail="Release search failed")
+
+
+@app.get("/portal/mam-status")
+async def get_mam_status(session=Depends(get_session)):
+    return JSONResponse(await mam_status_service.get_status())
 
 
 @app.get("/portal/history", response_model=HistoryResponse)

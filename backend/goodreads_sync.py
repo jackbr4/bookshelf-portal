@@ -252,11 +252,13 @@ async def _run():
     # Check MAM seeding slot availability before doing anything.
     # Only auto-cap when --max wasn't explicitly passed (preserves dry-run reports).
     mam_unsatisfied = await dl_client.count_mam_unsatisfied()
-    mam_limit = settings.mam_max_unsatisfied
+    # Cap against the block threshold (buffer below MAM's real 150 cap),
+    # shared with the portal's interactive dispatch guard.
+    mam_limit = settings.mam_block_threshold
     mam_slots = max(0, mam_limit - mam_unsatisfied)
     logger.info(
-        "MAM unsatisfied=%d/%d → %d slot(s) available",
-        mam_unsatisfied, mam_limit, mam_slots,
+        "MAM unsatisfied=%d/%d (cap %d) → %d slot(s) available",
+        mam_unsatisfied, mam_limit, settings.mam_max_unsatisfied, mam_slots,
     )
     if args.max is None and not dry:
         max_run = min(max_run, mam_slots)

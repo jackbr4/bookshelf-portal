@@ -171,16 +171,26 @@ class DownloadClient:
         )
         return info_hash
 
-    async def count_mam_unsatisfied(self) -> int:
+    async def get_mam_slot_status(self) -> dict:
         """
-        Count rTorrent torrents from MyAnonamouse that haven't yet satisfied the
-        72-hour seeding requirement (still downloading OR seeded < 72 h).
+        Query rTorrent for MyAnonamouse unsatisfied-torrent status.
 
-        Returns 0 if rTorrent is unreachable so the caller can still attempt
-        dispatches (which will fail on their own if rTorrent is down).
+        Returns:
+            {
+              "unsatisfied": int | None,   # None = rTorrent unreachable/unparseable
+              "next_free_at": int | None,  # unix ts when the earliest unsatisfied
+                                           # torrent completes its 72 h seed, or
+                                           # None if no unsatisfied torrent has
+                                           # finished downloading yet
+            }
+
+        "unsatisfied" is None (not 0) on failure so callers can distinguish
+        "no slots used" from "cannot verify" — interactive dispatch must
+        fail closed on the latter (MAM blocks the account for 24 h if a
+        download is requested while at the cap).
         """
         if self._torrent_client != "rtorrent":
-            return 0
+            return {"unsatisfied": 0, "next_free_at": None}
 
         # d.tracker_url= silently breaks d.multicall2 on this rTorrent build.
         # Instead we identify MAM torrents by the category label our dispatcher
@@ -208,11 +218,12 @@ class DownloadClient:
             resp.raise_for_status()
         except Exception as exc:
             logger.warning("[rtorrent] failed to query MAM slot count: %s", exc)
-            return 0
+            return {"unsatisfied": None, "next_free_at": None}
 
         import time
         now = time.time()
         unsatisfied = 0
+        earliest_finished: Optional[int] = None
 
         def _int_val(el) -> int:
             for tag in ("i8", "i4", "int"):
@@ -240,12 +251,32 @@ class DownloadClient:
                 seeding_seconds = (now - finished_at) if finished_at > 0 else 0
                 if seeding_seconds < 72 * 3600:
                     unsatisfied += 1
+                    # Still-downloading torrents (finished_at == 0) have no
+                    # predictable free-up time and are excluded from the ETA.
+                    if finished_at > 0 and (
+                        earliest_finished is None or finished_at < earliest_finished
+                    ):
+                        earliest_finished = finished_at
         except (ET.ParseError, ValueError) as exc:
             logger.warning("[rtorrent] failed to parse MAM slot response: %s", exc)
-            return 0
+            return {"unsatisfied": None, "next_free_at": None}
 
-        logger.info("[rtorrent] MAM unsatisfied torrents: %d", unsatisfied)
-        return unsatisfied
+        next_free_at = (earliest_finished + 72 * 3600) if earliest_finished else None
+        logger.info(
+            "[rtorrent] MAM unsatisfied torrents: %d (next_free_at=%s)",
+            unsatisfied, next_free_at,
+        )
+        return {"unsatisfied": unsatisfied, "next_free_at": next_free_at}
+
+    async def count_mam_unsatisfied(self) -> int:
+        """
+        Count of MAM-unsatisfied torrents, failing open (0) if rTorrent is
+        unreachable.  Used by the Goodreads sync cron, where a blind skip is
+        the right behaviour — interactive dispatch uses get_mam_slot_status()
+        directly and fails closed instead.
+        """
+        status = await self.get_mam_slot_status()
+        return status["unsatisfied"] if status["unsatisfied"] is not None else 0
 
     async def _get_all_hashes(self) -> set[str]:
         """Return the set of all info_hashes currently in rTorrent."""
