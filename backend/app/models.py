@@ -145,3 +145,39 @@ class ImportExtractResponse(BaseModel):
     source: Literal["url", "text"]
     # Page <title> (URL source) so the UI can label the list; None for pasted text.
     source_title: Optional[str] = None
+
+
+class ImportBookInput(BaseModel):
+    title: str
+    author: str = ""
+
+
+class ImportResolveRequest(BaseModel):
+    books: List[ImportBookInput]
+
+
+class ImportResolveCreated(BaseModel):
+    job_id: str
+    total: int
+
+
+ImportResolveItemStatus = Literal["pending", "in_library", "available", "not_found", "error"]
+
+
+class ImportResolveItem(BaseModel):
+    index: int
+    title: str
+    author: str
+    status: ImportResolveItemStatus = "pending"
+    # Full release search result once resolved (same shape as /portal/releases),
+    # so the import page can reuse the existing release components.
+    releases: Optional[ReleasesResponse] = None
+    error: Optional[str] = None
+
+
+class ImportResolveStatus(BaseModel):
+    job_id: str
+    done: bool
+    total: int
+    completed: int
+    results: List[ImportResolveItem]

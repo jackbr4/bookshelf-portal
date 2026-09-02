@@ -23,6 +23,7 @@ from .download_client import DownloadClient
 from .mam_status import MamStatusService
 from .resolver import BookResolver
 from .list_import import ListExtractor, ExtractionError
+from .import_jobs import ResolveJobStore
 from .models import (
     AuthRequest, AuthResponse,
     SearchResponse,
@@ -31,6 +32,7 @@ from .models import (
     DownloadRequest, DownloadResponse,
     HistoryItem, HistoryResponse,
     ImportExtractRequest, ImportExtractResponse,
+    ImportResolveRequest, ImportResolveCreated, ImportResolveStatus,
 )
 from .auth import get_session, create_session_token
 
@@ -108,6 +110,8 @@ list_extractor = ListExtractor(
     fetch_max_bytes=settings.list_import_fetch_max_bytes,
     mock_mode=settings.mock_mode,
 )
+
+resolve_jobs = ResolveJobStore(resolver=resolver, mock_mode=settings.mock_mode)
 
 
 @app.post("/portal/auth", response_model=AuthResponse)
@@ -302,6 +306,36 @@ async def import_extract(body: ImportExtractRequest, request: Request, session=D
             status_code=_EXTRACTION_STATUS.get(exc.code, 502),
             detail={"code": exc.code, "message": exc.message},
         )
+
+
+@app.post("/portal/import/resolve", response_model=ImportResolveCreated)
+@limiter.limit("10/minute")
+async def import_resolve_start(body: ImportResolveRequest, request: Request, session=Depends(get_session)):
+    books = [b for b in body.books if b.title.strip() or b.author.strip()]
+    if not books:
+        raise HTTPException(status_code=400, detail="At least one book with a title or author is required")
+    if len(books) > settings.list_import_max_books:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many books — the limit is {settings.list_import_max_books} per import",
+        )
+    job = resolve_jobs.create(books)
+    return ImportResolveCreated(job_id=job.id, total=len(books))
+
+
+@app.get("/portal/import/resolve/{job_id}", response_model=ImportResolveStatus)
+async def import_resolve_status(job_id: str, session=Depends(get_session)):
+    job = resolve_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired resolve job")
+    return job.status()
+
+
+@app.delete("/portal/import/resolve/{job_id}")
+async def import_resolve_cancel(job_id: str, session=Depends(get_session)):
+    if not resolve_jobs.cancel(job_id):
+        raise HTTPException(status_code=404, detail="Unknown or expired resolve job")
+    return {"ok": True}
 
 
 @app.get("/portal/history", response_model=HistoryResponse)
