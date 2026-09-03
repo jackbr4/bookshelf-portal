@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     history_db_path: str = "./history.db"
 
     # --- App ---
-    app_password: str = "family"
+    app_password: str = "changeme"
     app_session_secret: str = "changeme-secret"
     session_ttl_hours: float = 8.0
     cookie_secure: bool = False

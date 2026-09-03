@@ -48,7 +48,7 @@ Open `http://localhost:8788/portal` and log in with your `APP_PASSWORD`.
 ./start.sh
 ```
 
-Starts the backend (port 8788) and frontend dev server (port 5173) with hot reload. Default password is `family`. Set `MOCK_MODE=true` to skip live service connections.
+Starts the backend (port 8788) and frontend dev server (port 5173) with hot reload. Default password is `changeme`. Set `MOCK_MODE=true` to skip live service connections.
 
 ## Goodreads shelf sync
 
@@ -141,7 +141,7 @@ Copy `backend/.env.example` to `backend/.env` and fill in your values.
 
 | Variable | Default | Description |
 |---|---|---|
-| `APP_PASSWORD` | `family` | Shared access code for the portal |
+| `APP_PASSWORD` | `changeme` | Shared access code for the portal |
 | `APP_SESSION_SECRET` | `changeme-secret` | Secret for signing session cookies — use a long random string in production |
 | `SESSION_TTL_HOURS` | `8.0` | Session lifetime in hours |
 | `MOCK_MODE` | `true` | Set to `false` to use live services |
