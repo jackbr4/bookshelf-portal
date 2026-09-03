@@ -239,7 +239,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Log in with the access code `family`.
+Open `http://localhost:5173`. Log in with the access code `changeme`.
 
 **Verify the connection is working:**
 ```bash
@@ -255,7 +255,7 @@ curl -s http://localhost:8789/health
 # Get a session token
 TOKEN=$(curl -sf -X POST http://localhost:8789/portal/auth \
   -H "Content-Type: application/json" \
-  -d '{"access_code":"family"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])")
+  -d '{"access_code":"changeme"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])")
 
 # Test release search
 curl -sf "http://localhost:8789/portal/releases?title=Dune&author=Frank+Herbert" \

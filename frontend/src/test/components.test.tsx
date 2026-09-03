@@ -57,7 +57,7 @@ describe('PasswordGate', () => {
     mockLogin.mockResolvedValue({ ok: true, expiresAt: new Date(Date.now() + 3600000).toISOString() })
     const onSuccess = vi.fn()
     render(<PasswordGate onSuccess={onSuccess} />)
-    await userEvent.type(screen.getByPlaceholderText('Enter access code'), 'family')
+    await userEvent.type(screen.getByPlaceholderText('Enter access code'), 'changeme')
     fireEvent.click(screen.getByText('Continue'))
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())
   })

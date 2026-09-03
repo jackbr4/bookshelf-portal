@@ -14,7 +14,7 @@ import type {
   BookCandidate,
 } from '../lib/types';
 
-const MOCK_PASSWORD = 'family';
+const MOCK_PASSWORD = 'changeme';
 // Mirrors the backend's MOCK_MAM_EXHAUSTED: report 150/150 with a ~2h14m
 // countdown so the red banner can be exercised without a real rTorrent.
 const MOCK_MAM_EXHAUSTED = import.meta.env.VITE_MOCK_MAM_EXHAUSTED === 'true';

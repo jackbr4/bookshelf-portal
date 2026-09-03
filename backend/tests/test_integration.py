@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 BASE = "http://localhost:8788"
-PASSWORD = os.environ.get("APP_PASSWORD", "family")
+PASSWORD = os.environ.get("APP_PASSWORD", "changeme")
 PROWLARR_BASE = "http://localhost:29254"
 
 
