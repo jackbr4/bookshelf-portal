@@ -83,6 +83,42 @@ Profiles are managed in the `goodreads_profiles` table of the history database. 
 
 Runs every 4 hours. Pass `--dry-run` to preview what would be dispatched without actually downloading anything. Pass `--max N` to override the per-run dispatch limit for one run.
 
+## Import a book list (AI extraction)
+
+The home page's search card has "One book" / "From a URL" / "Paste text" tabs. The
+latter two extract a list of books from an article — a "best books of..."
+roundup, a reading list, an author's recommendations — instead of searching
+for a single title.
+
+### How it works
+
+1. **Extract** (`POST /portal/import/extract`) — for a URL, fetches the page
+   (rejecting anything resolving to a private/local address) and strips
+   boilerplate with `trafilatura`; for pasted text, uses it directly. The
+   cleaned text is sent to Claude with a JSON-schema-constrained prompt that
+   returns only the books the article actually recommends — not passing
+   mentions, ads, or "related articles" — each with a `confidence` of `high`
+   or `low` depending on how clearly the title/author were stated.
+2. **Review** — the extracted list is editable (fix a title, remove an entry,
+   add one by hand) before anything is searched.
+3. **Resolve** (`POST /portal/import/resolve`, polled via
+   `GET /portal/import/resolve/{job_id}`) — a background job checks each
+   book's availability the same way a manual search does (Calibre/Audiobookshelf
+   presence, Prowlarr release search), resolving a few books at a time and
+   streaming results to the page as they complete. An "Include audiobooks"
+   toggle (off by default) controls whether the audiobook search runs per book.
+4. **Download** — accepted releases can be downloaded individually or in bulk,
+   subject to the same MAM slot guard (`MAM_MAX_UNSATISFIED` /
+   `MAM_BLOCK_THRESHOLD`, see below) as a manual search.
+
+**Limitation:** this only sees what a plain HTTP fetch returns — infinite-scroll
+or "load more" pages that fetch additional entries via JavaScript will only
+yield whatever's in the initial page load. Pasting the text instead (after
+scrolling the article in a real browser) works around this.
+
+Requires an Anthropic API key. Without one (or with `MOCK_MODE=true`), extraction
+returns a small canned book list so the rest of the flow is still testable.
+
 ## Watcher (cron job)
 
 The watcher polls download clients for completed downloads and imports them automatically. Add to crontab:
@@ -182,6 +218,18 @@ Set `TORRENT_CLIENT=rtorrent` (default) or `TORRENT_CLIENT=qbittorrent`.
 | `GOODREADS_SHELF` | `to-read` | Shelf name to sync for the initial profile |
 | `GOODREADS_MAX_PER_RUN` | `3` | Maximum dispatches per cron run (MAM slot check is the hard cap) |
 | `MAM_MAX_UNSATISFIED` | `150` | Maximum allowed unsatisfied (seeding < 72 h) MAM torrents before the run is capped to zero |
+| `MAM_BLOCK_THRESHOLD` | `145` | Torrent downloads (manual or imported) are refused once unsatisfied count reaches this. Kept below `MAM_MAX_UNSATISFIED` as a buffer — MAM (VIP class) blocks the account for 24 h if a download is requested while at the real cap. Usenet downloads are never gated by this. |
+| `MOCK_MAM_EXHAUSTED` | `false` | Dev/testing only — with `MOCK_MODE=true`, reports the MAM slot status as exhausted so the "downloads paused" banner and countdown can be exercised locally. |
+
+### List import (AI extraction)
+
+| Variable | Default | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | *(empty)* | Required for URL/text list extraction. Leave unset (or use `MOCK_MODE=true`) to develop against a canned book list instead. |
+| `EXTRACTION_MODEL` | `claude-haiku-4-5` | Claude model used for extracting book candidates from article text |
+| `LIST_IMPORT_MAX_BOOKS` | `40` | Maximum number of books accepted from one extraction |
+| `LIST_IMPORT_FETCH_TIMEOUT` | `20.0` | Timeout (seconds) for fetching an article URL |
+| `LIST_IMPORT_FETCH_MAX_BYTES` | `2097152` | Maximum response size accepted when fetching an article URL (2 MB default) |
 
 ### Release filter tuning
 
@@ -213,6 +261,10 @@ bookshelf-portal/
       release_filter.py    # Accept/reject/score logic for ebooks and audiobooks
       history.py           # SQLite download history + Goodreads profile store
       calibre_library.py   # Calibre metadata.db reader (library presence checks)
+      resolver.py          # Shared book resolution (release search + presence checks)
+      list_import.py       # AI list extraction: fetch/paste -> trafilatura -> Claude
+      import_jobs.py       # Background resolve jobs for imported book lists
+      mam_status.py        # MAM slot status cache + dispatch guard
       auth.py              # Session token logic
       models.py            # Pydantic request/response models
       bookshelf_client.py  # Optional Readarr/Bookshelf integration
