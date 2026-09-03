@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import type { ImportResolveStatus, ReleasesResponse } from '../lib/types'
 
 vi.mock('../lib/api', async importOriginal => {
@@ -56,16 +56,80 @@ function renderRoute() {
   )
 }
 
+/** Stub /request that surfaces the handed-back tab so "Start over" can be asserted. */
+function RequestStub() {
+  const state = useLocation().state as { importMode?: string } | null
+  return <div data-testid="landed-on-request" data-import-mode={state?.importMode ?? 'book'} />
+}
+
+function renderRouteWithHomeStub() {
+  return render(
+    <MemoryRouter initialEntries={['/import']}>
+      <MamStatusProvider>
+        <Routes>
+          <Route path="/import" element={<ImportRoute />} />
+          <Route path="/request" element={<RequestStub />} />
+        </Routes>
+      </MamStatusProvider>
+    </MemoryRouter>
+  )
+}
+
+function renderRouteWithAutoExtract(autoExtract: { url: string } | { text: string }) {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: '/import', state: { autoExtract } }]}>
+      <MamStatusProvider>
+        <ImportRoute />
+      </MamStatusProvider>
+    </MemoryRouter>
+  )
+}
+
 async function goToReview(books = [
   { title: 'Piranesi', author: 'Susanna Clarke', confidence: 'high' as const },
   { title: 'Stoner', author: '', confidence: 'low' as const },
-]) {
+], render: () => void = renderRoute) {
   vi.mocked(extractList).mockResolvedValue({ books, source: 'url', sourceTitle: 'Best books' })
-  renderRoute()
+  render()
   await userEvent.type(screen.getByLabelText('Article URL'), 'https://example.com/list')
   fireEvent.click(screen.getByRole('button', { name: 'Extract books' }))
   await screen.findByTestId('import-review')
 }
+
+describe('ImportRoute — auto-extract handoff from the home page', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('starts extraction immediately from router state and shows a loading message, not the input form', async () => {
+    let resolveExtract: (v: Awaited<ReturnType<typeof extractList>>) => void = () => {}
+    vi.mocked(extractList).mockReturnValue(new Promise(res => { resolveExtract = res }))
+
+    renderRouteWithAutoExtract({ url: 'https://example.com/list' })
+
+    expect(await screen.findByTestId('import-auto-extracting')).toBeInTheDocument()
+    expect(screen.queryByTestId('import-input')).not.toBeInTheDocument()
+    expect(extractList).toHaveBeenCalledWith({ url: 'https://example.com/list' })
+
+    resolveExtract({ books: [{ title: 'Piranesi', author: 'Susanna Clarke', confidence: 'high' }], source: 'url', sourceTitle: null })
+    await screen.findByTestId('import-review')
+  })
+
+  it('falls back to the normal input card, pre-filled to the paste tab, if pasted text fails to extract', async () => {
+    vi.mocked(extractList).mockRejectedValue(
+      new ApiError(422, 'No books found in that text.', { code: 'no_content', message: 'No books found in that text.' })
+    )
+    renderRouteWithAutoExtract({ text: 'not a book list' })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No books found')
+    expect(screen.getByTestId('import-input')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Paste text' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('does not auto-extract on a plain visit to /import', async () => {
+    renderRoute()
+    expect(screen.getByTestId('import-input')).toBeInTheDocument()
+    expect(extractList).not.toHaveBeenCalled()
+  })
+})
 
 describe('ImportRoute — input stage', () => {
   afterEach(() => vi.clearAllMocks())
@@ -159,10 +223,27 @@ describe('ImportRoute — review stage', () => {
     await waitFor(() => expect(startResolve).toHaveBeenCalledWith(expect.anything(), true))
   })
 
-  it('start over returns to the input stage', async () => {
-    await goToReview()
+  it('start over returns to the home search page, reopened on the URL tab', async () => {
+    await goToReview(undefined, renderRouteWithHomeStub)
     fireEvent.click(screen.getByRole('button', { name: 'Start over' }))
-    expect(screen.getByTestId('import-input')).toBeInTheDocument()
+    const landed = await screen.findByTestId('landed-on-request')
+    expect(landed.dataset.importMode).toBe('url')
+  })
+
+  it('start over after a paste-text import reopens the paste tab', async () => {
+    vi.mocked(extractList).mockResolvedValue({
+      books: [{ title: 'Piranesi', author: 'Susanna Clarke', confidence: 'high' }],
+      source: 'text', sourceTitle: null,
+    })
+    renderRouteWithHomeStub()
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste text' }))
+    await userEvent.type(screen.getByLabelText('Article text'), 'some list')
+    fireEvent.click(screen.getByRole('button', { name: 'Extract books' }))
+    await screen.findByTestId('import-review')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }))
+    const landed = await screen.findByTestId('landed-on-request')
+    expect(landed.dataset.importMode).toBe('text')
   })
 })
 

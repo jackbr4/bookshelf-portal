@@ -98,6 +98,68 @@ describe('SearchCard', () => {
     fireEvent.click(screen.getByText('Search'))
     expect(onSearch).toHaveBeenCalled()
   })
+
+  it('hides the mode tabs when onImport is not provided (RequestRoute today)', () => {
+    render(
+      <SearchCard title="" author="" onTitleChange={vi.fn()} onAuthorChange={vi.fn()} onSearch={vi.fn()} loading={false} />
+    )
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+  })
+
+  it('switching to "From a URL" and submitting calls onImport with the url, not onSearch', async () => {
+    const onSearch = vi.fn()
+    const onImport = vi.fn()
+    render(
+      <SearchCard
+        title="" author="" onTitleChange={vi.fn()} onAuthorChange={vi.fn()}
+        onSearch={onSearch} onImport={onImport} loading={false}
+      />
+    )
+    fireEvent.click(screen.getByRole('tab', { name: 'From a URL' }))
+    await userEvent.type(screen.getByLabelText('Article URL'), 'https://example.com/list')
+    fireEvent.click(screen.getByRole('button', { name: 'Extract books' }))
+    expect(onImport).toHaveBeenCalledWith({ url: 'https://example.com/list' })
+    expect(onSearch).not.toHaveBeenCalled()
+  })
+
+  it('switching to "Paste text" and submitting calls onImport with the text', async () => {
+    const onImport = vi.fn()
+    render(
+      <SearchCard
+        title="" author="" onTitleChange={vi.fn()} onAuthorChange={vi.fn()}
+        onSearch={vi.fn()} onImport={onImport} loading={false}
+      />
+    )
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste text' }))
+    await userEvent.type(screen.getByLabelText('Article text'), 'some article text')
+    fireEvent.click(screen.getByRole('button', { name: 'Extract books' }))
+    expect(onImport).toHaveBeenCalledWith({ text: 'some article text' })
+  })
+
+  it('opens on the tab given by initialMode (e.g. returning from an import "Start over")', () => {
+    render(
+      <SearchCard
+        title="" author="" onTitleChange={vi.fn()} onAuthorChange={vi.fn()}
+        onSearch={vi.fn()} onImport={vi.fn()} initialMode="url" loading={false}
+      />
+    )
+    expect(screen.getByRole('tab', { name: 'From a URL' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Article URL')).toBeInTheDocument()
+  })
+
+  it('validates the import tabs independently of the book-search fields', async () => {
+    const onImport = vi.fn()
+    render(
+      <SearchCard
+        title="" author="" onTitleChange={vi.fn()} onAuthorChange={vi.fn()}
+        onSearch={vi.fn()} onImport={onImport} loading={false}
+      />
+    )
+    fireEvent.click(screen.getByRole('tab', { name: 'From a URL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Extract books' }))
+    expect(await screen.findByText('Enter a URL to import from.')).toBeInTheDocument()
+    expect(onImport).not.toHaveBeenCalled()
+  })
 })
 
 describe('ReleaseCard', () => {

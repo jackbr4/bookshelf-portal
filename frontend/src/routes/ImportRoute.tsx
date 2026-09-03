@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import PortalHeader from '../components/PortalHeader'
 import PortalToast from '../components/PortalToast'
 import ImportInputCard, { type ImportInputMode } from '../components/ImportInputCard'
@@ -19,10 +19,19 @@ export const RESOLVE_POLL_MS = 1500
 
 export default function ImportRoute() {
   const navigate = useNavigate()
+  const location = useLocation()
+  // Input handed off from the home-page search card ("From a URL" / "Paste
+  // text" tabs). Captured once; the history entry is scrubbed below so a
+  // refresh doesn't re-run the extraction.
+  const autoExtract = useRef<{ url: string } | { text: string } | null>(
+    (location.state as { autoExtract?: { url: string } | { text: string } } | null)?.autoExtract ?? null
+  )
   const { toast, showToast, dismissToast, download, dispatch } = useDownloader()
 
   const [stage, setStage] = useState<Stage>('input')
-  const [inputMode, setInputMode] = useState<ImportInputMode>('url')
+  const [inputMode, setInputMode] = useState<ImportInputMode>(
+    autoExtract.current && 'text' in autoExtract.current ? 'text' : 'url'
+  )
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<{ message: string; offerPaste: boolean } | null>(null)
 
@@ -45,6 +54,16 @@ export default function ImportRoute() {
   // ---------------------------------------------------------------------
   // Stage 1: extract
   // ---------------------------------------------------------------------
+
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (autoExtract.current && !autoStarted.current) {
+      autoStarted.current = true
+      navigate(location.pathname, { replace: true, state: null })
+      handleExtract(autoExtract.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleExtract(input: { url: string } | { text: string }) {
     setExtracting(true)
@@ -152,11 +171,9 @@ export default function ImportRoute() {
     stopJob()
     bulk.cancel()
     bulk.clear()
-    setJob(null)
-    setRows([])
-    setSourceTitle(null)
-    setExtractError(null)
-    setStage('input')
+    // Return to the home page's search card, reopened on whichever import
+    // tab was active, rather than this route's own now-orphaned input form.
+    navigate('/request', { state: { importMode: inputMode } })
   }
 
   function handleBackToReview() {
@@ -202,13 +219,17 @@ export default function ImportRoute() {
     <div className="portal-page">
       <PortalHeader
         title="Import a list"
-        showImport={false}
         backLink={{ to: '/request', label: '← back to requests' }}
         onSignOut={handleLogout}
       />
 
       <main className="portal-main">
-        {stage === 'input' && (
+        {stage === 'input' && autoExtract.current && extracting && !extractError ? (
+          <section className="search-card" data-testid="import-auto-extracting">
+            <p className="search-card__eyebrow">IMPORT A BOOK LIST</p>
+            <p className="search-card__helper">Reading the list and pulling out titles…</p>
+          </section>
+        ) : stage === 'input' && (
           <ImportInputCard
             mode={inputMode}
             onModeChange={setInputMode}

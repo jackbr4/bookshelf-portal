@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import PortalHeader from '../components/PortalHeader'
-import SearchCard from '../components/SearchCard'
+import SearchCard, { type SearchMode } from '../components/SearchCard'
 import ReleaseResults from '../components/ReleaseResults'
 import PortalToast from '../components/PortalToast'
 import { getReleases, logout } from '../lib/api'
@@ -11,6 +11,13 @@ import type { ReleasesResponse, ReleaseItem, MediaType } from '../lib/types'
 
 export default function RequestRoute() {
   const navigate = useNavigate()
+  const location = useLocation()
+  // "Start over" from the import flow hands back which tab was active so
+  // the user lands where they left off rather than on the default book
+  // search. Captured once — a later render/refresh shouldn't keep forcing it.
+  const initialMode = useRef<SearchMode | undefined>(
+    (location.state as { importMode?: SearchMode } | null)?.importMode
+  ).current
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [results, setResults] = useState<ReleasesResponse | null>(null)
@@ -83,6 +90,8 @@ export default function RequestRoute() {
           onAuthorChange={setAuthor}
           onSearch={handleSearch}
           onClear={handleClear}
+          onImport={input => navigate('/import', { state: { autoExtract: input } })}
+          initialMode={initialMode}
           hasResults={!!results}
           loading={searching}
           error={searchError ?? undefined}

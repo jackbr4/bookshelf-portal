@@ -6,6 +6,8 @@ filter, and returns scored results ready for the UI.
 """
 
 import logging
+import re
+import time
 from typing import Optional
 
 import httpx
@@ -69,9 +71,23 @@ class ReleaseResult:
 # Stop issuing fallback queries once this many accepted releases are found.
 EARLY_STOP_ACCEPTED = 5
 
+# How long a (title, author, content_type) search result is reused before a
+# fresh Prowlarr/MAM query is made. Book listicles frequently repeat the
+# same classics, and duplicate/near-duplicate lookups are common within one
+# import — this makes those instant instead of re-querying MAM, cutting
+# both latency and indexer load for the exact case that motivated it.
+_CACHE_TTL_SECONDS = 600
+# Prune expired entries once the cache grows past this size, so a long-running
+# process doesn't accumulate stale entries indefinitely.
+_CACHE_MAX_ENTRIES = 500
+
+
+def _cache_key_part(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().lower())
+
 
 class ProwlarrClient:
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, clock=time.monotonic):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self._client = httpx.AsyncClient(
@@ -79,17 +95,47 @@ class ProwlarrClient:
             headers={"X-Api-Key": self.api_key},
             timeout=30.0,
         )
+        self._cache: dict[tuple[str, str, str], tuple[float, tuple[list[ReleaseResult], list[ReleaseResult]]]] = {}
+        # Injectable so tests can control cache expiry without touching the
+        # real clock (asyncio's own scheduling also reads time.monotonic,
+        # so patching it globally in tests is not safe).
+        self._clock = clock
 
     async def search_releases(
         self, title: str, author: str, content_type: str = "ebook"
     ) -> tuple[list[ReleaseResult], list[ReleaseResult]]:
         """
-        Search Prowlarr for releases matching title + author.
+        Search Prowlarr for releases matching title + author, cached for
+        _CACHE_TTL_SECONDS per (title, author, content_type).
 
         content_type: "ebook" (default) or "audiobook" — controls categories and filtering.
         Returns (accepted, rejected) — both lists are sorted by score descending.
         Rejected entries include a reject_reason for UI display.
         """
+        key = (_cache_key_part(title), _cache_key_part(author), content_type)
+        cached = self._cache.get(key)
+        if cached is not None:
+            cached_at, result = cached
+            if self._clock() - cached_at < _CACHE_TTL_SECONDS:
+                logger.info("[prowlarr] cache hit: title=%r author=%r (%s)", title, author, content_type)
+                return result
+            del self._cache[key]
+
+        result = await self._search_releases_uncached(title, author, content_type)
+        self._cache[key] = (self._clock(), result)
+        if len(self._cache) > _CACHE_MAX_ENTRIES:
+            self._prune_expired()
+        return result
+
+    def _prune_expired(self) -> None:
+        now = self._clock()
+        expired = [k for k, (cached_at, _) in self._cache.items() if now - cached_at >= _CACHE_TTL_SECONDS]
+        for k in expired:
+            del self._cache[k]
+
+    async def _search_releases_uncached(
+        self, title: str, author: str, content_type: str = "ebook"
+    ) -> tuple[list[ReleaseResult], list[ReleaseResult]]:
         if content_type == "audiobook":
             categories = [("categories", 3030), ("categories", 100013)]
         else:
