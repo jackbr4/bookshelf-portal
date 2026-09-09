@@ -27,12 +27,15 @@ class _FakeRelease:
         }
 
 
-def _make_resolver(library_books=None, audiobooks_dir="/nonexistent", search=None) -> BookResolver:
+def _make_resolver(library_books=None, audiobooks_dir="/nonexistent", search=None, calibre_web_url="") -> BookResolver:
     calibre = MagicMock()
     calibre.get_library_books.return_value = library_books or []
     prowlarr = MagicMock()
     prowlarr.search_releases = search or AsyncMock(return_value=([], []))
-    return BookResolver(prowlarr=prowlarr, calibre_library=calibre, audiobooks_dir=audiobooks_dir)
+    return BookResolver(
+        prowlarr=prowlarr, calibre_library=calibre, audiobooks_dir=audiobooks_dir,
+        calibre_web_url=calibre_web_url,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +104,7 @@ def test_resolve_book_combines_searches_and_presence(tmp_path: Path):
         return [_FakeRelease("Dune.m4b")], []
 
     r = _make_resolver(
-        library_books=[{"title": "Dune", "author": "Frank Herbert"}],
+        library_books=[{"id": 1, "title": "Dune", "author": "Frank Herbert"}],
         audiobooks_dir=str(tmp_path),
         search=search,
     )
@@ -231,3 +234,198 @@ def test_resolve_book_flags_already_requested_releases_and_history():
     resp = asyncio.run(r.resolve_book("Dune", "Frank Herbert"))
     assert resp.history_match is not None and resp.history_match.status == "imported"
     assert [(x.title, x.already_requested) for x in resp.ebook_accepted] == [("Dune [EPUB]", True), ("Dune [MOBI]", False)]
+
+
+# ---------------------------------------------------------------------------
+# Per-release "already in Calibre" (author-only search regression + link)
+# ---------------------------------------------------------------------------
+
+def test_author_only_search_flags_release_already_in_library():
+    # Reproduces the reported bug: searching by author alone (no title)
+    # previously could never match check_in_calibre, because _book_matches
+    # requires a non-empty query title. The per-release check is independent
+    # of that path and must work here.
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Dept. Of Speculation by Jenny Offill [ENG / EPUB]")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 3227, "title": "Dept. Of Speculation", "author": "Jenny Offill"}],
+        search=search,
+    )
+    resp = asyncio.run(r.resolve_book("", "Jenny Offill"))
+    # The old top-level check still can't match on an empty title -- that's
+    # fine, per-release now carries the signal instead.
+    assert resp.calibre_title is None
+    [release] = resp.ebook_accepted
+    assert release.already_in_library is True
+    assert release.library_title == "Dept. Of Speculation"
+
+
+def test_already_in_library_takes_priority_over_already_requested():
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Dept. Of Speculation by Jenny Offill [ENG / EPUB]")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 3227, "title": "Dept. Of Speculation", "author": "Jenny Offill"}],
+        search=search,
+    )
+    r.history_db = _history([{
+        "title": "Dept. Of Speculation", "author": "Jenny Offill",
+        "release_title": "Dept. Of Speculation by Jenny Offill [ENG / EPUB]",
+        "status": "imported", "created_at": "2026-08-01T10:00:00+00:00",
+        "media_type": "ebook", "protocol": "torrent",
+    }])
+    resp = asyncio.run(r.resolve_book("", "Jenny Offill"))
+    [release] = resp.ebook_accepted
+    assert release.already_in_library is True
+    assert release.already_requested is True  # both true; frontend prioritises library
+
+
+def test_library_url_built_only_when_calibre_web_url_configured():
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Dept. Of Speculation by Jenny Offill [ENG / EPUB]")], []
+        return [], []
+
+    library = [{"id": 3227, "title": "Dept. Of Speculation", "author": "Jenny Offill"}]
+
+    r = _make_resolver(library_books=library, search=search)  # no calibre_web_url
+    [release] = asyncio.run(r.resolve_book("", "Jenny Offill")).ebook_accepted
+    assert release.already_in_library is True
+    assert release.library_url is None
+
+    r = _make_resolver(library_books=library, search=search, calibre_web_url="https://library.example.com/")
+    [release] = asyncio.run(r.resolve_book("", "Jenny Offill")).ebook_accepted
+    assert release.library_url == "https://library.example.com/book/3227"
+
+
+def test_release_match_requires_whole_word_boundary():
+    # A short Calibre title must not match as a mid-word substring of an
+    # unrelated release title (e.g. "Art" inside "Cartography").
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Cartography of Loss by Jenny Offill [EPUB]")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 1, "title": "Art", "author": "Jenny Offill"}],
+        search=search,
+    )
+    [release] = asyncio.run(r.resolve_book("", "Jenny Offill")).ebook_accepted
+    assert release.already_in_library is False
+
+
+def test_release_match_requires_author_match():
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Dept. Of Speculation by Someone Else [EPUB]")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 3227, "title": "Dept. Of Speculation", "author": "Jenny Offill"}],
+        search=search,
+    )
+    [release] = asyncio.run(r.resolve_book("", "Someone Else")).ebook_accepted
+    assert release.already_in_library is False
+
+
+def test_title_and_author_search_still_flags_release_in_library():
+    # Non-regression: the common case (title + author both given) still works.
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Dept. Of Speculation by Jenny Offill [ENG / EPUB]")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 3227, "title": "Dept. Of Speculation", "author": "Jenny Offill"}],
+        search=search,
+    )
+    [release] = asyncio.run(r.resolve_book("Dept. of Speculation", "Jenny Offill")).ebook_accepted
+    assert release.already_in_library is True
+
+
+def test_title_only_search_does_not_flag_a_different_book_that_contains_the_title():
+    # Reported bug: searching "Little Eyes" (no author) correctly matched
+    # "Little Eyes by Samanta Schweblin [ENG / EPUB]", but also incorrectly
+    # flagged three unrelated Willow Rose releases whose titles happen to
+    # contain "Little Eyes" as a substring ("Careful Little Eyes").
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [
+                _FakeRelease("Little Eyes by Samanta Schweblin [ENG / EPUB]"),
+                _FakeRelease("Careful Little Eyes by Willow Rose [ENG / EPUB]"),
+                _FakeRelease("Willow Rose - [7th Street Crew - Mary Mills Mysteries 04] - Careful Little Eyes (epub)"),
+                _FakeRelease("Willow Rose - [7th Street Crew 04] - Careful Little Eyes (epub)"),
+            ], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[{"id": 555, "title": "Little Eyes", "author": "Samanta Schweblin"}],
+        search=search,
+    )
+    releases = asyncio.run(r.resolve_book("Little Eyes", "")).ebook_accepted
+    by_title = {x.title: x.already_in_library for x in releases}
+    assert by_title["Little Eyes by Samanta Schweblin [ENG / EPUB]"] is True
+    assert by_title["Careful Little Eyes by Willow Rose [ENG / EPUB]"] is False
+    assert by_title["Willow Rose - [7th Street Crew - Mary Mills Mysteries 04] - Careful Little Eyes (epub)"] is False
+    assert by_title["Willow Rose - [7th Street Crew 04] - Careful Little Eyes (epub)"] is False
+
+
+def test_bracketed_series_metadata_does_not_block_a_real_match():
+    # Reported bug: searching "Dune" (a series with several books already in
+    # Calibre) returned results but flagged none of them. Scene releases for
+    # series entries routinely carry "[Series Name NN]" and "(edition)"
+    # tags -- that's metadata, not extra title words, and shouldn't count
+    # against a genuine match.
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [
+                _FakeRelease("Frank Herbert [Chronicles of Dune 05] Heretics Of Dune (epub)"),
+                _FakeRelease("Frank Herbert - [Dune 06] - Chapterhouse Dune (retail) (epub)"),
+                _FakeRelease("Frank Herbert - [Dune 03] - Children Of Dune (retail) (epub)"),
+                # An unrelated book that just happens to contain "Dune" --
+                # must still NOT match despite the bracket-stripping.
+                _FakeRelease("Bell, Cindy - Dune House Cozy Mystery 32 - Docks, Discoveries, and Danger"),
+            ], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[
+            {"id": 2268, "title": "Heretics of Dune", "author": "Frank Herbert"},
+            {"id": 2272, "title": "Chapterhouse: Dune", "author": "Frank Herbert"},
+            {"id": 2269, "title": "Children Of Dune", "author": "Frank Herbert"},
+        ],
+        search=search,
+    )
+    releases = asyncio.run(r.resolve_book("Dune", "")).ebook_accepted
+    by_title = {x.title: x.already_in_library for x in releases}
+    assert by_title["Frank Herbert [Chronicles of Dune 05] Heretics Of Dune (epub)"] is True
+    assert by_title["Frank Herbert - [Dune 06] - Chapterhouse Dune (retail) (epub)"] is True
+    assert by_title["Frank Herbert - [Dune 03] - Children Of Dune (retail) (epub)"] is True
+    assert by_title["Bell, Cindy - Dune House Cozy Mystery 32 - Docks, Discoveries, and Danger"] is False
+
+
+def test_coauthored_book_matches_even_when_release_credits_both_authors():
+    # Reported bug: co-authored library books (one row per author, per
+    # Calibre's schema) were never flagged, because a release crediting BOTH
+    # authors left whichever one wasn't on the matched row "unexplained".
+    async def search(title, author, content_type="ebook"):
+        if content_type == "ebook":
+            return [_FakeRelease("Brian Herbert & Kevin J Anderson - [Great Schools of Dune 02] - Mentats Of Dune (epub)")], []
+        return [], []
+
+    r = _make_resolver(
+        library_books=[
+            # Same book id, one row per co-author -- matches metadata.db's
+            # one-row-per-(book,author) join.
+            {"id": 2252, "title": "Mentats Of Dune", "author": "Brian Herbert"},
+            {"id": 2252, "title": "Mentats Of Dune", "author": "Kevin J. Anderson"},
+        ],
+        search=search,
+    )
+    [release] = asyncio.run(r.resolve_book("Dune", "")).ebook_accepted
+    assert release.already_in_library is True

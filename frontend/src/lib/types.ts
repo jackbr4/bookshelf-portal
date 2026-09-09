@@ -19,6 +19,11 @@ export interface ReleaseItem {
   rejectReason?: string | null;
   /** This exact release was already sent to the download client (per history). */
   alreadyRequested?: boolean;
+  /** This release's book appears to already be in the Calibre library. Takes priority over alreadyRequested. */
+  alreadyInLibrary?: boolean;
+  libraryTitle?: string | null;
+  /** Link to the book's Calibre-Web page, if configured server-side. */
+  libraryUrl?: string | null;
 }
 
 /** A past, non-failed download of (what looks like) the same book. */

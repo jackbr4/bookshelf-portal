@@ -175,6 +175,49 @@ describe('ReleaseCard', () => {
     expect(screen.getByText('Download')).not.toBeDisabled()
     expect(screen.getByText(sampleRelease.title)).toBeInTheDocument()
   })
+
+  it('shows an "Already in Calibre" badge with a link when configured', () => {
+    render(
+      <ReleaseCard
+        release={{ ...sampleRelease, alreadyInLibrary: true, libraryTitle: 'Dune', libraryUrl: 'https://library.example.com/book/42' }}
+        viewMode="simple"
+        downloading={false}
+        onDownload={vi.fn()}
+      />
+    )
+    expect(screen.getByText('📚 Already in Calibre')).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: 'View in Calibre →' })
+    expect(link).toHaveAttribute('href', 'https://library.example.com/book/42')
+    expect(link).toHaveAttribute('target', '_blank')
+    // Still offered, same as "already requested"
+    expect(screen.getByRole('button', { name: 'Download anyway' })).toBeInTheDocument()
+  })
+
+  it('shows the "Already in Calibre" badge without a link when no URL is configured', () => {
+    render(
+      <ReleaseCard
+        release={{ ...sampleRelease, alreadyInLibrary: true, libraryTitle: 'Dune', libraryUrl: null }}
+        viewMode="simple"
+        downloading={false}
+        onDownload={vi.fn()}
+      />
+    )
+    expect(screen.getByText('📚 Already in Calibre')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View in Calibre →' })).not.toBeInTheDocument()
+  })
+
+  it('prioritises "Already in Calibre" over "Already requested" when both are true', () => {
+    render(
+      <ReleaseCard
+        release={{ ...sampleRelease, alreadyInLibrary: true, alreadyRequested: true }}
+        viewMode="simple"
+        downloading={false}
+        onDownload={vi.fn()}
+      />
+    )
+    expect(screen.getByText('📚 Already in Calibre')).toBeInTheDocument()
+    expect(screen.queryByText('↻ Already requested')).not.toBeInTheDocument()
+  })
 })
 
 describe('PortalHeader', () => {

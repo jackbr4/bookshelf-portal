@@ -79,6 +79,27 @@ export default function ReleaseCard({ release, viewMode, downloading, sent = fal
         )}
         {sent ? (
           <span className="status-badge" title="Sent to the download client">✓ Sent</span>
+        ) : release.alreadyInLibrary && !downloading ? (
+          <div className="release-card__requested">
+            <span className="status-badge status-badge--progress" title="This book appears to already be in your Calibre library">
+              📚 Already in Calibre
+            </span>
+            {release.libraryUrl && (
+              <a
+                href={release.libraryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-button release-card__anyway"
+              >
+                View in Calibre →
+              </a>
+            )}
+            {!slotBlocked && (
+              <button type="button" className="link-button release-card__anyway" onClick={() => onDownload(release)}>
+                Download anyway
+              </button>
+            )}
+          </div>
         ) : release.alreadyRequested && !downloading ? (
           <div className="release-card__requested">
             <span className="status-badge status-badge--progress" title="This release was already sent to the download client">

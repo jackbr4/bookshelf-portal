@@ -195,6 +195,7 @@ Set `TORRENT_CLIENT=rtorrent` (default) or `TORRENT_CLIENT=qbittorrent`.
 | `CALIBRE_LIBRARY_PATH` | `/calibre/library` | Path to your Calibre library directory |
 | `CALIBRE_IMAGE` | `lscr.io/linuxserver/calibre:latest` | Docker image used to run `calibredb` when not installed locally |
 | `CALIBREDB_BOOKS_DIR` | `/books` | Source directory scanned by `calibredb add` |
+| `CALIBRE_WEB_URL` | *(empty)* | Public Calibre-Web base URL. When set, releases that appear to already be in the library link to the book's Calibre-Web page (`/book/<id>`); when empty, the "already in library" status shows without a link. |
 
 ### Audiobookshelf
 

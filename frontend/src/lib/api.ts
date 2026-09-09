@@ -96,6 +96,9 @@ function mapRelease(r: any): ReleaseItem {
     rejected: r.rejected,
     rejectReason: r.reject_reason,
     alreadyRequested: !!r.already_requested,
+    alreadyInLibrary: !!r.already_in_library,
+    libraryTitle: r.library_title,
+    libraryUrl: r.library_url,
   };
 }
 

@@ -80,6 +80,12 @@ class ReleaseItem(BaseModel):
     reject_reason: Optional[str] = None
     # This exact release was already sent to the download client (per history.db)
     already_requested: bool = False
+    # This release's book appears to already be in the Calibre library.
+    # Takes priority over already_requested when both are true.
+    already_in_library: bool = False
+    library_title: Optional[str] = None
+    # Link to the book's Calibre-Web page, if CALIBRE_WEB_URL is configured.
+    library_url: Optional[str] = None
 
 
 class HistoryMatch(BaseModel):

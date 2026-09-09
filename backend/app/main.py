@@ -101,6 +101,7 @@ resolver = BookResolver(
     calibre_library=calibre_library,
     audiobooks_dir=settings.audiobooks_dir,
     history_db=history_db,
+    calibre_web_url=settings.calibre_web_url,
 )
 
 list_extractor = ListExtractor(

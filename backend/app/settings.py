@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     calibre_library_path: str = "/calibre/library"
     calibre_image: str = "lscr.io/linuxserver/calibre:latest"
     calibredb_books_dir: str = "/books"
+    # Public Calibre-Web base URL, e.g. https://library.example.com -- used to
+    # link "already in library" results to the book's page (/book/<id>).
+    # Leave empty to show the "already in library" status without a link.
+    calibre_web_url: str = ""
 
     # --- Audiobookshelf ---
     audiobooks_dir: str = "/home/jackbr4/files/audiobooks"

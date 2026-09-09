@@ -1,9 +1,11 @@
 """
 CalibreLibrary — read-only access to Calibre's metadata.db for library status annotation.
 
-Returns {title, author} dicts that are compatible with annotate_existing_or_monitored
-in search_adapter.py.  Results are cached for 60 seconds so repeated searches within
-the same minute don't each hit the DB.
+Returns {id, title, author} dicts. `id` is Calibre's own book id (metadata.db
+primary key), which doubles as the path segment for a Calibre-Web book page
+(/book/<id>) -- used to link "already in library" results back to Calibre-Web.
+Results are cached for 60 seconds so repeated searches within the same minute
+don't each hit the DB.
 """
 
 import logging
@@ -42,14 +44,14 @@ class CalibreLibrary:
             )
             conn.row_factory = sqlite3.Row
             rows = conn.execute("""
-                SELECT b.title, a.name AS author
+                SELECT b.id, b.title, a.name AS author
                 FROM   books b
                 JOIN   books_authors_link ba ON b.id = ba.book
                 JOIN   authors a             ON a.id = ba.author
             """).fetchall()
             conn.close()
 
-            books = [{"title": row["title"], "author": row["author"]} for row in rows]
+            books = [{"id": row["id"], "title": row["title"], "author": row["author"]} for row in rows]
             self._cache = (books, now)
             logger.info("[calibre_library] loaded %d books from metadata.db", len(books))
             return books
