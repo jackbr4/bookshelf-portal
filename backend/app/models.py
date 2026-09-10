@@ -139,6 +139,8 @@ class HistoryItem(BaseModel):
     created_at: str
     updated_at: str
     error: Optional[str] = None
+    calibre_id: Optional[int] = None
+    library_url: Optional[str] = None
 
 
 class HistoryResponse(BaseModel):

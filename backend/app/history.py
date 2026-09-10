@@ -151,7 +151,12 @@ class HistoryDB:
     def get_recent(self, limit: int = 50) -> list[dict]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?",
+                """SELECT d.*,
+                          (SELECT i.calibre_id FROM imports i
+                           WHERE i.download_id = d.id AND i.status = 'imported'
+                           ORDER BY i.imported_at DESC LIMIT 1) AS calibre_id
+                   FROM downloads d
+                   ORDER BY d.created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]

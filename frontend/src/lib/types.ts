@@ -66,6 +66,8 @@ export interface HistoryItem {
   createdAt: string;
   updatedAt: string;
   error?: string | null;
+  calibreId?: number | null;
+  libraryUrl?: string | null;
 }
 
 export interface SeedingItem {

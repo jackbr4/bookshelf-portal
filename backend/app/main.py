@@ -354,7 +354,13 @@ async def import_resolve_cancel(job_id: str, session=Depends(get_session)):
 @app.get("/portal/history", response_model=HistoryResponse)
 async def get_history(session=Depends(get_session), limit: int = 500):
     items = history_db.get_recent(limit=min(limit, 1000))
-    return HistoryResponse(items=[HistoryItem(**i) for i in items])
+    calibre_web_url = settings.calibre_web_url.rstrip("/")
+    result = []
+    for i in items:
+        calibre_id = i.get("calibre_id")
+        library_url = f"{calibre_web_url}/book/{calibre_id}" if calibre_id and calibre_web_url else None
+        result.append(HistoryItem(**i, library_url=library_url))
+    return HistoryResponse(items=result)
 
 
 @app.get("/portal", include_in_schema=False)

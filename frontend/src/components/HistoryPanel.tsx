@@ -127,6 +127,11 @@ export default function HistoryPanel({
                   <p className="history-row__time">{formatHistoryDate(item.createdAt)}</p>
                   {seedLeft && <p className="history-row__seed">{seedLeft}</p>}
                   {item.error && <p className="history-row__error">⚠ {item.error}</p>}
+                  {item.libraryUrl && (
+                    <a href={item.libraryUrl} target="_blank" rel="noopener noreferrer" className="link-button">
+                      View in Calibre →
+                    </a>
+                  )}
                 </div>
               </article>
             )

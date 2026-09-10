@@ -147,6 +147,8 @@ function mapHistoryItem(item: any): HistoryItem {
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     error: item.error,
+    calibreId: item.calibre_id,
+    libraryUrl: item.library_url,
   };
 }
 
