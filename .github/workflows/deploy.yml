@@ -63,7 +63,7 @@ jobs:
               --restart=always \
               --network=host \
               --env-file ~/apps/bookshelf-portal/.env \
-              -v /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro \
+              -v /mnt/mpathe/jackbr4/calibre-web/calibre-web/library:/mnt/mpathe/jackbr4/calibre-web/calibre-web/library:ro \
               -v /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db \
               bookshelf-request-portal
 

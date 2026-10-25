@@ -8,5 +8,5 @@ services:
     restart: unless-stopped
     volumes:
       - /home/jackbr4/apps/bookshelf-portal/history.db:/home/jackbr4/apps/bookshelf-portal/history.db
-      - /mnt/mpathw/jackbr4/calibre-web/calibre-web/library:/mnt/mpathw/jackbr4/calibre-web/calibre-web/library:ro
+      - /mnt/mpathe/jackbr4/calibre-web/calibre-web/library:/mnt/mpathe/jackbr4/calibre-web/calibre-web/library:ro
       - /home/jackbr4/files/audiobooks:/home/jackbr4/files/audiobooks

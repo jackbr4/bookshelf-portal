@@ -10,6 +10,7 @@ don't each hit the DB.
 
 import logging
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,12 @@ class CalibreLibrary:
     def __init__(self, library_path: str):
         self._db_path = str(Path(library_path) / "metadata.db")
         self._cache: Optional[tuple[list[dict], float]] = None
+        # Resolver calls get_library_books() from more than one concurrent
+        # coroutine per request (the presence check and the main lookup),
+        # each dispatched to a different executor thread. Without a lock,
+        # concurrent cache misses each ran their own full metadata.db query
+        # instead of one filling the cache for the other.
+        self._lock = threading.Lock()
 
     def get_library_books(self) -> list[dict]:
         """
@@ -35,6 +42,15 @@ class CalibreLibrary:
         if self._cache and (now - self._cache[1]) < _CACHE_TTL:
             return self._cache[0]
 
+        with self._lock:
+            # Re-check: another thread may have just filled the cache while
+            # we were waiting for the lock.
+            now = time.monotonic()
+            if self._cache and (now - self._cache[1]) < _CACHE_TTL:
+                return self._cache[0]
+            return self._load(now)
+
+    def _load(self, now: float) -> list[dict]:
         try:
             conn = sqlite3.connect(
                 f"file:{self._db_path}?mode=ro",
