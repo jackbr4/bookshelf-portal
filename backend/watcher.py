@@ -18,6 +18,7 @@ import shutil
 import ssl
 import sys
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 from urllib.request import Request, urlopen
@@ -124,6 +125,104 @@ def rt_base_path(info_hash: str) -> Optional[str]:
     except Exception as exc:
         logger.warning("[rtorrent] d.base_path failed for %s: %s", info_hash[:12], exc)
     return None
+
+
+def rt_tracker_message(info_hash: str) -> str:
+    """Return rTorrent's last tracker message for a torrent (empty string if none)."""
+    try:
+        raw = _rt_call("d.message", info_hash)
+        root = ET.fromstring(raw)
+        el = root.find(".//string")
+        return el.text or "" if el is not None else ""
+    except Exception as exc:
+        logger.warning("[rtorrent] d.message failed for %s: %s", info_hash[:12], exc)
+    return ""
+
+
+def rt_bytes_done(info_hash: str) -> int:
+    """Return bytes downloaded so far for a torrent (0 if unknown)."""
+    try:
+        raw = _rt_call("d.bytes_done", info_hash)
+        root = ET.fromstring(raw)
+        for tag in ("i8", "i4", "int"):
+            el = root.find(f".//{tag}")
+            if el is not None:
+                return int(el.text)
+    except Exception as exc:
+        logger.warning("[rtorrent] d.bytes_done failed for %s: %s", info_hash[:12], exc)
+    return 0
+
+
+# A torrent with zero progress and a non-empty tracker message (e.g. a
+# "Failure reason" rejection) for longer than this is almost certainly stuck,
+# not just between announces — tracker errors can be transient for a few
+# minutes, so this grace period avoids flagging a brief first-announce blip.
+TRACKER_STALL_GRACE_SECONDS = 300
+
+
+def notify(title: str, message: str, priority: str = "high"):
+    """Send an ntfy alert. Mirrors ~/scripts/notify.sh's behavior/config for the same topic."""
+    if not settings.ntfy_url:
+        return
+    try:
+        req = Request(
+            f"{settings.ntfy_url}/{settings.ntfy_topic}",
+            data=message.encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {settings.ntfy_token}",
+                "Title": title,
+                "Priority": priority,
+            },
+            method="POST",
+        )
+        urlopen(req, timeout=10).read()
+    except Exception as exc:
+        logger.warning("[ntfy] notify failed: %s", exc)
+
+
+def rt_torrent_fault(info_hash: str) -> Optional[str]:
+    """
+    Return rTorrent's XML-RPC fault string if this info-hash is genuinely
+    unknown to rTorrent (removed, never loaded, crashed out), or None if the
+    hash exists (or if the check itself failed/timed out).
+
+    rTorrent/XML-RPC returns faults as a normal HTTP 200 <fault> body, not an
+    HTTP error -- _rt_call doesn't raise for these. Other accessors here
+    (rt_base_path, rt_tracker_message, rt_bytes_done) use loose `.//string` /
+    `.//i8` XPath lookups that happen to also match a fault's faultString/
+    faultCode fields, silently returning fault text/codes as if they were
+    real values -- harmless for their own use (a fault reliably fails their
+    specific success condition) but not a real signal on its own. This
+    checks for the literal <fault> wrapper explicitly instead of relying on
+    that coincidence.
+
+    Deliberately returns None (not "missing") on any exception -- a
+    transient rTorrent outage or network blip must never be mistaken for
+    "this specific torrent was removed"; only a clean response containing an
+    actual <fault> counts as positive evidence of removal.
+    """
+    try:
+        raw = _rt_call("d.hash", info_hash)
+        if b"<fault>" not in raw:
+            return None
+        root = ET.fromstring(raw)
+        el = root.find(".//string")
+        return el.text if el is not None else "unknown rTorrent fault"
+    except Exception as exc:
+        logger.warning("[rtorrent] d.hash fault-check failed for %s: %s", info_hash[:12], exc)
+        return None
+
+
+# A torrent info-hash rTorrent no longer recognizes at all for longer than
+# this is treated as permanently gone (manually removed, crashed out, never
+# completed) rather than "still registering." NOT the same thing as the
+# 12-week (default) seeding cleanup in cleanup.py -- that job only ever
+# removes torrents already relabelled to the *-imported category, which only
+# happens after this watcher has successfully imported them into Calibre (see
+# rt_set_category below). A record still in this script's "downloading"
+# query is by definition never-imported, so cleanup.py cannot be the
+# explanation for its hash disappearing.
+TORRENT_MISSING_GRACE_SECONDS = 600
 
 
 def rt_set_category(info_hash: str, category: str):
@@ -426,6 +525,39 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
             base_path = qbt_content_path(download_id, qbt)
         else:
             if not rt_is_complete(download_id):
+                age = datetime.now(timezone.utc) - datetime.fromisoformat(record["created_at"])
+
+                fault = rt_torrent_fault(download_id)
+                if fault:
+                    if age > timedelta(seconds=TORRENT_MISSING_GRACE_SECONDS):
+                        logger.error("[watcher] torrent vanished from rTorrent for %r: %s", title, fault)
+                        db.update_download_status(record_id, "error", f"torrent missing from rTorrent: {fault}")
+                        notify(
+                            "Download vanished from rTorrent",
+                            f"{title!r} by {author} never finished and rTorrent no longer recognizes "
+                            f"its info-hash ({fault}). Not the 12-week seeding cleanup — that job only "
+                            f"ever touches already-imported torrents, and this one never got that far. "
+                            f"Likely manually removed or crashed out before completing.",
+                            priority="urgent",
+                        )
+                    else:
+                        logger.debug(
+                            "[watcher] %r not yet visible in rTorrent (hash %s, %ds old) — within grace period",
+                            title, download_id[:12], int(age.total_seconds()),
+                        )
+                    return
+
+                tracker_msg = rt_tracker_message(download_id)
+                if tracker_msg and rt_bytes_done(download_id) == 0:
+                    if age > timedelta(seconds=TRACKER_STALL_GRACE_SECONDS):
+                        logger.error("[watcher] tracker rejected %r: %s", title, tracker_msg)
+                        db.update_download_status(record_id, "error", f"tracker: {tracker_msg}")
+                        notify(
+                            "Download stuck — tracker rejected it",
+                            f"{title!r} by {author}: {tracker_msg}",
+                            priority="urgent",
+                        )
+                        return
                 logger.debug("[watcher] %r still downloading (torrent)", title)
                 return
             base_path = rt_base_path(download_id)

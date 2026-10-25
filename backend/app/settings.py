@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # --- Audiobookshelf ---
     audiobooks_dir: str = "/home/jackbr4/files/audiobooks"
 
+    # --- ntfy alerts (watcher.py) ---
+    ntfy_url: str = "http://127.0.0.1:8085"
+    ntfy_token: str = ""
+    ntfy_topic: str = "seedbox"
+
     # --- History DB ---
     history_db_path: str = "./history.db"
 
