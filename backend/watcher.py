@@ -13,6 +13,7 @@ Without --env it reads from the production .env next to settings.py.
 """
 
 import argparse
+import fcntl
 import logging
 import shutil
 import ssl
@@ -661,7 +662,25 @@ def process_record(record: dict, db: HistoryDB, calibre: CalibreClient, qbt: Opt
     )
 
 
+# A calibredb add (via the heavyweight linuxserver/calibre desktop container)
+# routinely runs longer than the 60s cron interval under host I/O pressure.
+# Without this lock, the next cron tick starts a second instance that picks
+# up the same "downloading" record (the first instance hasn't yet flipped its
+# status to "importing") and re-runs calibredb add --duplicates on the same
+# file -- which always force-adds, silently creating real duplicate library
+# entries. Non-blocking: a tick that finds a prior run still in progress
+# exits immediately rather than queuing up behind it.
+_LOCK_PATH = Path(__file__).parent / ".watcher.lock"
+
+
 def main():
+    lock_file = open(_LOCK_PATH, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        logger.info("[watcher] previous run still in progress -- skipping this tick")
+        return
+
     db = HistoryDB(settings.history_db_path)
     calibre = CalibreClient(
         library_path=settings.calibre_library_path,

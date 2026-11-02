@@ -11,6 +11,7 @@ __pycache__/
 *.egg-info/
 backend/venv/
 backend/.venv/
+backend/.watcher.lock
 
 # Node
 node_modules/
